@@ -15,7 +15,7 @@ object FakeEvents {
             location = "Parque Cafetero",
             distanceKm = 0.8,
             price = 0,
-            category = EventCategory.DEPORTE,
+            category = EventCategory.SPORTS,
             attendeeCount = 42
         ),
         Event(
@@ -26,7 +26,7 @@ object FakeEvents {
             location = "Biblioteca Pública",
             distanceKm = 1.4,
             price = 0,
-            category = EventCategory.CULTURA,
+            category = EventCategory.CULTURE,
             attendeeCount = 18
         ),
         Event(
@@ -37,7 +37,7 @@ object FakeEvents {
             location = "Salón Comunal La Villa",
             distanceKm = 2.1,
             price = 5000,
-            category = EventCategory.COMUNIDAD,
+            category = EventCategory.COMMUNITY,
             attendeeCount = 9
         )
     )

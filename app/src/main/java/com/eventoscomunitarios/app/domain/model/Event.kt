@@ -17,7 +17,7 @@ data class Event(
 }
 
 enum class EventCategory {
-    DEPORTE,
-    CULTURA,
-    COMUNIDAD
+    SPORTS,
+    CULTURE,
+    COMMUNITY
 }

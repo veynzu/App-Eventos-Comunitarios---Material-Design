@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.eventoscomunitarios.app.features.home.HomeScreen
 import com.eventoscomunitarios.app.features.login.LoginScreen
 import com.eventoscomunitarios.app.features.onboarding.OnboardingScreen
 import com.eventoscomunitarios.app.features.recuperar_contrasenia.RecuperarContrasenaScreen
@@ -40,6 +41,10 @@ class MainActivity : ComponentActivity() {
                     mutableStateOf(false)
                 }
 
+                var mostrarHome by rememberSaveable {
+                    mutableStateOf(false)
+                }
+
                 Scaffold(
                     modifier = Modifier.fillMaxSize()
                 ) { innerPadding ->
@@ -47,6 +52,14 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding)
                     ) {
                         when {
+                            mostrarHome -> {
+                                HomeScreen(
+                                    onAbrirMapa = {},
+                                    onAbrirMisEventos = {},
+                                    onAbrirPerfil = {}
+                                )
+                            }
+
                             mostrarRegistro -> {
                                 RegistroScreen(
                                     onNavigateBack = {
@@ -65,7 +78,12 @@ class MainActivity : ComponentActivity() {
 
                             mostrarLogin -> {
                                 LoginScreen(
-                                    onIniciarSesion = {},
+                                    onIniciarSesion = {
+                                        mostrarHome = true
+                                        mostrarLogin = false
+                                        mostrarRegistro = false
+                                        mostrarRecuperarContrasena = false
+                                    },
                                     onRecuperarContrasena = {
                                         mostrarRecuperarContrasena = true
                                     },
