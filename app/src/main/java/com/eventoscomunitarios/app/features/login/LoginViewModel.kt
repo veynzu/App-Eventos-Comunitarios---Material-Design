@@ -2,8 +2,9 @@ package com.eventoscomunitarios.app.features.login
 
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
-import com.eventoscomunitarios.app.core.data.FakeUsers
+import com.eventoscomunitarios.app.core.data.FakeAccounts
 import com.eventoscomunitarios.app.core.util.RequestResult
+import com.eventoscomunitarios.app.domain.model.AppUser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,7 +16,8 @@ data class LoginUiState(
     val recordar: Boolean = true,
     val emailError: String? = null,
     val passwordError: String? = null,
-    val loginResult: RequestResult? = null
+    val loginResult: RequestResult? = null,
+    val authenticatedUser: AppUser? = null
 ) {
     val isFormValid: Boolean
         get() = email.isNotBlank() &&
@@ -27,14 +29,14 @@ data class LoginUiState(
 class LoginViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
-
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
     fun onEmailChange(newEmail: String) {
         _uiState.update { state ->
             state.copy(
                 email = newEmail,
-                emailError = validateEmail(newEmail)
+                emailError = validateEmail(newEmail),
+                authenticatedUser = null
             )
         }
     }
@@ -43,7 +45,8 @@ class LoginViewModel : ViewModel() {
         _uiState.update { state ->
             state.copy(
                 password = newPassword,
-                passwordError = validatePassword(newPassword)
+                passwordError = validatePassword(newPassword),
+                authenticatedUser = null
             )
         }
     }
@@ -60,21 +63,25 @@ class LoginViewModel : ViewModel() {
         if (!currentState.isFormValid) return
 
         _uiState.update { state ->
-            state.copy(loginResult = RequestResult.Loading)
+            state.copy(
+                loginResult = RequestResult.Loading,
+                authenticatedUser = null
+            )
         }
 
-        val credentialsAreValid = FakeUsers.users.any { user ->
-            user.email == currentState.email &&
-                    user.password == currentState.password
-        }
+        val authenticatedUser = FakeAccounts.authenticate(
+            email = currentState.email.trim(),
+            password = currentState.password
+        )
 
         _uiState.update { state ->
             state.copy(
-                loginResult = if (credentialsAreValid) {
+                loginResult = if (authenticatedUser != null) {
                     RequestResult.Success
                 } else {
                     RequestResult.Failure("Correo o contraseña incorrectos")
-                }
+                },
+                authenticatedUser = authenticatedUser
             )
         }
     }
@@ -92,7 +99,7 @@ class LoginViewModel : ViewModel() {
     private fun validateEmail(email: String): String? {
         return when {
             email.isBlank() -> "El correo es obligatorio"
-            !Patterns.EMAIL_ADDRESS.matcher(email).matches() ->
+            !Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() ->
                 "Ingresa un correo válido"
             else -> null
         }

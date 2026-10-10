@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventoscomunitarios.app.core.util.RequestResult
+import com.eventoscomunitarios.app.domain.model.AppUser
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.AzulClaro
 import com.eventoscomunitarios.app.ui.theme.Fondo
@@ -72,7 +73,7 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 @Composable
 fun LoginScreen(
     viewModel: LoginViewModel = viewModel(),
-    onIniciarSesion: () -> Unit,
+    onIniciarSesion: (AppUser) -> Unit,
     onRecuperarContrasena: () -> Unit = {},
     onCrearCuenta: () -> Unit = {}
 ) {
@@ -83,8 +84,9 @@ fun LoginScreen(
         when (val result = state.loginResult) {
             RequestResult.Success -> {
                 snackbarHostState.showSnackbar("Inicio de sesión exitoso")
+                val authenticatedUser = state.authenticatedUser
                 viewModel.clearLoginResult()
-                onIniciarSesion()
+                authenticatedUser?.let(onIniciarSesion)
             }
 
             is RequestResult.Failure -> {

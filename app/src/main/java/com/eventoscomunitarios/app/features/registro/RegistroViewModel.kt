@@ -2,7 +2,11 @@ package com.eventoscomunitarios.app.features.registro
 
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
+import com.eventoscomunitarios.app.core.data.FakeAccounts
 import com.eventoscomunitarios.app.core.util.RequestResult
+import com.eventoscomunitarios.app.domain.model.AccountStatus
+import com.eventoscomunitarios.app.domain.model.AppUser
+import com.eventoscomunitarios.app.domain.model.UserRole
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,12 +20,17 @@ data class RegistroUiState(
     val confirmPassword: String = "",
     val isOrganizer: Boolean = false,
     val terminos: Boolean = false,
+    val currentStep: Int = 1,
+    val documentFrontUri: String? = null,
+    val documentBackUri: String? = null,
     val nombreError: String? = null,
     val emailError: String? = null,
     val telefonoError: String? = null,
     val passwordError: String? = null,
     val confirmPasswordError: String? = null,
-    val registroResult: RequestResult? = null
+    val documentError: String? = null,
+    val registroResult: RequestResult? = null,
+    val registeredUser: AppUser? = null
 ) {
     val isFormValid: Boolean
         get() = nombre.isNotBlank() &&
@@ -35,6 +44,9 @@ data class RegistroUiState(
                 telefonoError == null &&
                 passwordError == null &&
                 confirmPasswordError == null
+
+    val documentsAreSelected: Boolean
+        get() = documentFrontUri != null && documentBackUri != null
 }
 
 class RegistroViewModel : ViewModel() {
@@ -96,7 +108,13 @@ class RegistroViewModel : ViewModel() {
 
     fun onAccountTypeChange(isOrganizer: Boolean) {
         _uiState.update { state ->
-            state.copy(isOrganizer = isOrganizer)
+            state.copy(
+                isOrganizer = isOrganizer,
+                currentStep = 1,
+                documentFrontUri = null,
+                documentBackUri = null,
+                documentError = null
+            )
         }
     }
 
@@ -106,17 +124,94 @@ class RegistroViewModel : ViewModel() {
         }
     }
 
-    fun registrar() {
+    fun onDocumentFrontSelected(uri: String?) {
+        _uiState.update { state ->
+            state.copy(
+                documentFrontUri = uri,
+                documentError = null
+            )
+        }
+    }
+
+    fun onDocumentBackSelected(uri: String?) {
+        _uiState.update { state ->
+            state.copy(
+                documentBackUri = uri,
+                documentError = null
+            )
+        }
+    }
+
+    fun onBackFromDocuments() {
+        _uiState.update { state ->
+            state.copy(
+                currentStep = 1,
+                documentError = null
+            )
+        }
+    }
+
+    fun onContinuarClick() {
+        val currentState = _uiState.value
+        if (!currentState.isFormValid) return
+
+        if (currentState.isOrganizer && currentState.currentStep == 1) {
+            _uiState.update { state ->
+                state.copy(currentStep = 2)
+            }
+            return
+        }
+
+        registrar()
+    }
+
+    private fun registrar() {
         val currentState = _uiState.value
 
         if (!currentState.isFormValid) return
+
+        if (currentState.isOrganizer && !currentState.documentsAreSelected) {
+            _uiState.update { state ->
+                state.copy(
+                    documentError = "Selecciona el frente y el reverso de tu documento."
+                )
+            }
+            return
+        }
+
+        val user = AppUser(
+            fullName = currentState.nombre.trim(),
+            email = currentState.email.trim(),
+            phone = currentState.telefono.trim(),
+            role = if (currentState.isOrganizer) {
+                UserRole.ORGANIZER
+            } else {
+                UserRole.CLIENT
+            },
+            cedula = currentState.isOrganizer && currentState.documentsAreSelected,
+            // Por ahora, cliente y organizador terminan con estado "creado".
+            // PENDING_VERIFICATION queda disponible para una etapa posterior.
+            accountStatus = AccountStatus.CREATED
+        )
 
         _uiState.update { state ->
             state.copy(registroResult = RequestResult.Loading)
         }
 
+        val registered = FakeAccounts.register(
+            user = user,
+            password = currentState.password
+        )
+
         _uiState.update { state ->
-            state.copy(registroResult = RequestResult.Success)
+            state.copy(
+                registroResult = if (registered) {
+                    RequestResult.Success
+                } else {
+                    RequestResult.Failure("Ya existe una cuenta con ese correo electrónico.")
+                },
+                registeredUser = if (registered) user else null
+            )
         }
     }
 
@@ -124,6 +219,10 @@ class RegistroViewModel : ViewModel() {
         _uiState.update { state ->
             state.copy(registroResult = null)
         }
+    }
+
+    fun resetForm() {
+        _uiState.value = RegistroUiState()
     }
 
     private fun validateNombre(nombre: String): String? {
@@ -137,7 +236,7 @@ class RegistroViewModel : ViewModel() {
     private fun validateEmail(email: String): String? {
         return when {
             email.isBlank() -> "El correo es obligatorio"
-            !Patterns.EMAIL_ADDRESS.matcher(email).matches() ->
+            !Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() ->
                 "Ingresa un correo válido"
             else -> null
         }
@@ -156,6 +255,10 @@ class RegistroViewModel : ViewModel() {
             password.isBlank() -> "La contraseña es obligatoria"
             password.length < 8 ->
                 "La contraseña debe tener al menos 8 caracteres"
+            password.none { it.isUpperCase() } ->
+                "La contraseña debe incluir al menos una mayúscula"
+            password.none { it.isDigit() } ->
+                "La contraseña debe incluir al menos un número"
             else -> null
         }
     }

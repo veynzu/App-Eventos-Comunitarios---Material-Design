@@ -1,8 +1,10 @@
 package com.eventoscomunitarios.app.features.registro
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,17 +20,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Phone
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -37,6 +49,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,22 +60,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventoscomunitarios.app.core.util.RequestResult
+import com.eventoscomunitarios.app.domain.model.AppUser
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.AzulClaro
 import com.eventoscomunitarios.app.ui.theme.Fondo
@@ -73,16 +83,31 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 @Composable
 fun RegistroScreen(
     viewModel: RegistroViewModel = viewModel(),
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onRegistroExitoso: (AppUser) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    val frontDocumentPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        viewModel.onDocumentFrontSelected(uri?.toString())
+    }
+
+    val backDocumentPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        viewModel.onDocumentBackSelected(uri?.toString())
+    }
+
     LaunchedEffect(state.registroResult) {
         when (val result = state.registroResult) {
             RequestResult.Success -> {
-                snackbarHostState.showSnackbar("Registro exitoso")
+                snackbarHostState.showSnackbar("Cuenta creada correctamente")
+                val registeredUser = state.registeredUser
                 viewModel.clearRegistroResult()
+                registeredUser?.let(onRegistroExitoso)
             }
 
             is RequestResult.Failure -> {
@@ -102,28 +127,38 @@ fun RegistroScreen(
         },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { innerPadding ->
-        Box(
+        RegistroContent(
+            state = state,
+            onNavigateBack = {
+                if (state.currentStep == 2) {
+                    viewModel.onBackFromDocuments()
+                } else {
+                    onNavigateBack()
+                }
+            },
+            onNombreChange = viewModel::onNombreChange,
+            onEmailChange = viewModel::onEmailChange,
+            onTelefonoChange = viewModel::onTelefonoChange,
+            onPasswordChange = viewModel::onPasswordChange,
+            onConfirmPasswordChange = viewModel::onConfirmPasswordChange,
+            onAccountTypeChange = viewModel::onAccountTypeChange,
+            onTerminosChange = viewModel::onTerminosChange,
+            onSelectFrontDocument = {
+                frontDocumentPicker.launch("image/*")
+            },
+            onSelectBackDocument = {
+                backDocumentPicker.launch("image/*")
+            },
+            onContinuar = viewModel::onContinuarClick,
             modifier = Modifier.padding(innerPadding)
-        ) {
-            RegistroContent(
-                state = state,
-                onNombreChange = viewModel::onNombreChange,
-                onEmailChange = viewModel::onEmailChange,
-                onTelefonoChange = viewModel::onTelefonoChange,
-                onPasswordChange = viewModel::onPasswordChange,
-                onConfirmPasswordChange = viewModel::onConfirmPasswordChange,
-                onAccountTypeChange = viewModel::onAccountTypeChange,
-                onTerminosChange = viewModel::onTerminosChange,
-                onRegistrar = viewModel::registrar,
-                onNavigateBack = onNavigateBack
-            )
-        }
+        )
     }
 }
 
 @Composable
 private fun RegistroContent(
     state: RegistroUiState,
+    onNavigateBack: () -> Unit,
     onNombreChange: (String) -> Unit,
     onEmailChange: (String) -> Unit,
     onTelefonoChange: (String) -> Unit,
@@ -131,586 +166,457 @@ private fun RegistroContent(
     onConfirmPasswordChange: (String) -> Unit,
     onAccountTypeChange: (Boolean) -> Unit,
     onTerminosChange: (Boolean) -> Unit,
-    onRegistrar: () -> Unit,
-    onNavigateBack: () -> Unit
+    onSelectFrontDocument: () -> Unit,
+    onSelectBackDocument: () -> Unit,
+    onContinuar: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var mostrarContrasena by rememberSaveable {
         mutableStateOf(false)
     }
+
     val azulPrincipal = MaterialTheme.colorScheme.primary
 
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         color = Fondo
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
+                .padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp, start = 8.dp, end = 16.dp),
+                    .padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onNavigateBack) {
                     Icon(
-                        imageVector = Icons.Default.ArrowBack,
+                        imageVector = Icons.Outlined.ArrowBack,
                         contentDescription = "Volver",
                         tint = TextoPrincipal
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+
                 Text(
                     text = "Crear cuenta",
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Medium,
                     color = TextoPrincipal
                 )
             }
 
-            Box(
+            LinearProgressIndicator(
+                progress = if (state.currentStep == 2) 1f else 0.5f,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-            ) {
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .background(azulPrincipal)
-                        .align(Alignment.CenterStart)
-                )
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxWidth(0.5f)
-                        .height(2.dp)
-                        .background(azulPrincipal)
-                        .align(Alignment.CenterStart)
-                )
-            }
+                    .height(2.dp),
+                color = azulPrincipal,
+                trackColor = Color(0xFFE0E4E8)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = if (state.currentStep == 1 && state.isOrganizer) {
+                    "Paso 1 de 2 · Datos personales"
+                } else if (state.currentStep == 2) {
+                    "Paso 2 de 2 · Verificación de identidad"
+                } else {
+                    "Datos personales"
+                },
+                fontSize = 11.sp,
+                color = azulPrincipal,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Paso 1 de 1 - Datos personales",
-                    fontSize = 12.sp,
-                    color = azulPrincipal,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OutlinedTextField(
-                    value = state.nombre,
-                    onValueChange = onNombreChange,
-                    label = {
-                        Text("Nombre completo")
-                    },
-                    leadingIcon = {
-                        IconoUsuario()
-                    },
-                    isError = state.nombreError != null,
-                    supportingText = {
-                        state.nombreError?.let { error ->
-                            Text(error)
-                        }
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
+                if (state.currentStep == 1) {
+                    RegistroField(
+                        value = state.nombre,
+                        onValueChange = onNombreChange,
+                        label = "Nombre completo",
+                        placeholder = "Ana María Torres",
+                        error = state.nombreError,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Person,
+                                contentDescription = null
+                            )
+                        },
+                        keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Next
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(5.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = azulPrincipal,
-                        unfocusedBorderColor = Gris,
-                        focusedLabelColor = azulPrincipal,
-                        cursorColor = azulPrincipal
                     )
-                )
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = state.email,
-                    onValueChange = onEmailChange,
-                    label = {
-                        Text("Correo electrónico")
-                    },
-                    leadingIcon = {
-                        IconoCorreoReg()
-                    },
-                    isError = state.emailError != null,
-                    supportingText = {
-                        state.emailError?.let { error ->
-                            Text(error)
-                        }
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
+                    RegistroField(
+                        value = state.email,
+                        onValueChange = onEmailChange,
+                        label = "Correo electrónico",
+                        placeholder = "ana.torres@correo.com",
+                        error = state.emailError,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Email,
+                                contentDescription = null
+                            )
+                        },
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Next
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(5.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = azulPrincipal,
-                        unfocusedBorderColor = Gris,
-                        focusedLabelColor = azulPrincipal,
-                        cursorColor = azulPrincipal
                     )
-                )
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = state.telefono,
-                    onValueChange = onTelefonoChange,
-                    label = {
-                        Text("Teléfono")
-                    },
-                    leadingIcon = {
-                        IconoTelefono()
-                    },
-                    isError = state.telefonoError != null,
-                    supportingText = {
-                        state.telefonoError?.let { error ->
-                            Text(error)
-                        }
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
+                    RegistroField(
+                        value = state.telefono,
+                        onValueChange = onTelefonoChange,
+                        label = "Teléfono",
+                        placeholder = "+57 310 555 4821",
+                        error = state.telefonoError,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Phone,
+                                contentDescription = null
+                            )
+                        },
                         keyboardType = KeyboardType.Phone,
                         imeAction = ImeAction.Next
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(5.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = azulPrincipal,
-                        unfocusedBorderColor = Gris,
-                        focusedLabelColor = azulPrincipal,
-                        cursorColor = azulPrincipal
                     )
-                )
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = state.password,
-                    onValueChange = onPasswordChange,
-                    label = {
-                        Text("Contraseña")
-                    },
-                    leadingIcon = {
-                        IconoCandadoReg()
-                    },
-                    trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                mostrarContrasena = !mostrarContrasena
-                            }
-                        ) {
-                            IconoOjoReg(visible = mostrarContrasena)
-                        }
-                    },
-                    visualTransformation = if (mostrarContrasena) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
-                    isError = state.passwordError != null,
-                    supportingText = {
-                        if (state.passwordError != null) {
-                            Text(state.passwordError)
+                    RegistroField(
+                        value = state.password,
+                        onValueChange = onPasswordChange,
+                        label = "Contraseña",
+                        placeholder = "",
+                        error = state.passwordError,
+                        supportingText = if (state.passwordError == null) {
+                            "8+ caracteres, 1 mayúscula y 1 número"
                         } else {
-                            Text("8+ caracteres, 1 mayúscula y 1 número")
-                        }
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
+                            null
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Lock,
+                                contentDescription = null
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(
+                                onClick = {
+                                    mostrarContrasena = !mostrarContrasena
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (mostrarContrasena) {
+                                        Icons.Outlined.VisibilityOff
+                                    } else {
+                                        Icons.Outlined.Visibility
+                                    },
+                                    contentDescription = if (mostrarContrasena) {
+                                        "Ocultar contraseña"
+                                    } else {
+                                        "Mostrar contraseña"
+                                    }
+                                )
+                            }
+                        },
+                        visualTransformation = if (mostrarContrasena) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
                         keyboardType = KeyboardType.Password,
                         imeAction = ImeAction.Next
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(5.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = azulPrincipal,
-                        unfocusedBorderColor = Gris,
-                        focusedLabelColor = azulPrincipal,
-                        cursorColor = azulPrincipal
                     )
-                )
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = state.confirmPassword,
-                    onValueChange = onConfirmPasswordChange,
-                    label = {
-                        Text("Confirmar contraseña")
-                    },
-                    leadingIcon = {
-                        IconoCandadoReg()
-                    },
-                    visualTransformation = PasswordVisualTransformation(),
-                    isError = state.confirmPasswordError != null,
-                    supportingText = {
-                        state.confirmPasswordError?.let { error ->
-                            Text(error)
-                        }
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
+                    RegistroField(
+                        value = state.confirmPassword,
+                        onValueChange = onConfirmPasswordChange,
+                        label = "Confirmar contraseña",
+                        placeholder = "",
+                        error = state.confirmPasswordError,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Lock,
+                                contentDescription = null
+                            )
+                        },
+                        visualTransformation = PasswordVisualTransformation(),
                         keyboardType = KeyboardType.Password,
                         imeAction = ImeAction.Done
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(5.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = azulPrincipal,
-                        unfocusedBorderColor = Gris,
-                        focusedLabelColor = azulPrincipal,
-                        cursorColor = azulPrincipal,
-                        errorBorderColor = Color(0xFFD32F2F),
-                        errorLabelColor = Color(0xFFD32F2F),
-                        errorSupportingTextColor = Color(0xFFD32F2F)
                     )
-                )
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Tipo de cuenta",
-                    fontSize = 14.sp,
-                    color = TextoSecundario,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .clickable { onAccountTypeChange(false) },
-                        shape = RoundedCornerShape(
-                            topStart = 50f,
-                            bottomStart = 50f
-                        ),
-                        color = if (!state.isOrganizer) AzulClaro else Fondo,
-                        border = BorderStroke(
-                            1.dp,
-                            if (!state.isOrganizer) azulPrincipal else Gris
-                        )
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "Cliente",
-                                fontSize = 14.sp,
-                                color = if (!state.isOrganizer) azulPrincipal else TextoSecundario
-                            )
-                        }
-                    }
-
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .clickable { onAccountTypeChange(true) },
-                        shape = RoundedCornerShape(
-                            topEnd = 50f,
-                            bottomEnd = 50f
-                        ),
-                        color = if (state.isOrganizer) AzulClaro else Fondo,
-                        border = BorderStroke(
-                            1.dp,
-                            if (state.isOrganizer) azulPrincipal else Gris
-                        )
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "Organizador",
-                                fontSize = 14.sp,
-                                color = if (state.isOrganizer) azulPrincipal else TextoSecundario
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = state.terminos,
-                        onCheckedChange = onTerminosChange,
-                        modifier = Modifier.size(32.dp),
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = azulPrincipal
-                        )
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Acepto los Términos y la Política de datos",
+                        text = "Tipo de cuenta",
                         fontSize = 12.sp,
+                        color = TextoPrincipal
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White, RoundedCornerShape(50))
+                            .border(
+                                width = 1.dp,
+                                color = Gris,
+                                shape = RoundedCornerShape(50)
+                            ),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RoleOption(
+                            text = "Cliente",
+                            selected = !state.isOrganizer,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                onAccountTypeChange(false)
+                            }
+                        )
+
+                        RoleOption(
+                            text = "Organizador",
+                            selected = state.isOrganizer,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                onAccountTypeChange(true)
+                            }
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = state.terminos,
+                            onCheckedChange = onTerminosChange,
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = azulPrincipal
+                            )
+                        )
+
+                        Text(
+                            text = "Acepto los Términos y la Política de datos",
+                            fontSize = 11.sp,
+                            color = TextoSecundario
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "A continuación, toma una foto de tu documento de identidad por ambos lados. Debe verse completo y con buena calidad para validar tus datos.",
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = TextoSecundario
+                    )
+
+                    Text(
+                        text = "1) Frente de tu documento",
+                        fontSize = 12.sp,
+                        color = TextoPrincipal
+                    )
+
+                    DocumentoSelector(
+                        selected = state.documentFrontUri != null,
+                        onClick = onSelectFrontDocument
+                    )
+
+                    Text(
+                        text = "2) Atrás de tu documento",
+                        fontSize = 12.sp,
+                        color = TextoPrincipal
+                    )
+
+                    DocumentoSelector(
+                        selected = state.documentBackUri != null,
+                        onClick = onSelectBackDocument
+                    )
+
+                    state.documentError?.let { error ->
+                        Text(
+                            text = error,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    Text(
+                        text = "La documentación se simula localmente en esta versión. No se envía a un servidor.",
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
                         color = TextoSecundario
                     )
                 }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Button(
-                    onClick = onRegistrar,
-                    enabled = state.isFormValid,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = azulPrincipal,
-                        contentColor = Color.White
-                    )
-                ) {
-                    Text(
-                        text = "Continuar",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = onContinuar,
+                enabled = state.isFormValid &&
+                        (state.currentStep == 1 || state.documentsAreSelected),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = azulPrincipal,
+                    contentColor = Color.White,
+                    disabledContainerColor = Color(0xFF9DBACB),
+                    disabledContentColor = Color.White
+                )
+            ) {
+                Text(
+                    text = "Continuar",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
 
 @Composable
-private fun IconoUsuario() {
-    Canvas(modifier = Modifier.size(20.dp)) {
-        val color = Gris
-        val grosor = 1.5.dp.toPx()
+private fun RegistroField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    placeholder: String,
+    error: String?,
+    leadingIcon: @Composable (() -> Unit)? = null,
+    trailingIcon: @Composable (() -> Unit)? = null,
+    supportingText: String? = null,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    keyboardType: KeyboardType,
+    imeAction: ImeAction
+) {
+    val azulPrincipal = MaterialTheme.colorScheme.primary
 
-        drawCircle(
-            color = color,
-            radius = size.width * 0.2f,
-            center = Offset(size.width * 0.5f, size.height * 0.35f),
-            style = Stroke(width = grosor)
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = {
+            Text(label)
+        },
+        placeholder = {
+            if (placeholder.isNotBlank()) {
+                Text(placeholder)
+            }
+        },
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        isError = error != null,
+        supportingText = {
+            when {
+                error != null -> Text(error)
+                supportingText != null -> Text(supportingText)
+            }
+        },
+        singleLine = true,
+        visualTransformation = visualTransformation,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = keyboardType,
+            imeAction = imeAction
+        ),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(5.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = azulPrincipal,
+            unfocusedBorderColor = Gris,
+            focusedLabelColor = azulPrincipal,
+            cursorColor = azulPrincipal
         )
+    )
+}
 
-        val bodyPath = Path().apply {
-            moveTo(size.width * 0.2f, size.height * 0.85f)
-            quadraticTo(
-                size.width * 0.2f,
-                size.height * 0.65f,
-                size.width * 0.5f,
-                size.height * 0.65f
-            )
-            quadraticTo(
-                size.width * 0.8f,
-                size.height * 0.65f,
-                size.width * 0.8f,
-                size.height * 0.85f
+@Composable
+private fun RoleOption(
+    text: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val azulPrincipal = MaterialTheme.colorScheme.primary
+
+    Surface(
+        modifier = modifier
+            .height(36.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(50),
+        color = if (selected) AzulClaro else Color.Transparent,
+        contentColor = if (selected) azulPrincipal else TextoPrincipal
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
             )
         }
-        drawPath(
-            path = bodyPath,
-            color = color,
-            style = Stroke(width = grosor)
-        )
     }
 }
 
 @Composable
-private fun IconoTelefono() {
-    Canvas(modifier = Modifier.size(20.dp)) {
-        val color = Gris
-        val grosor = 1.5.dp.toPx()
+private fun DocumentoSelector(
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val azulPrincipal = MaterialTheme.colorScheme.primary
 
-        val phonePath = Path().apply {
-            moveTo(
-                size.width * 0.3f,
-                size.height * 0.2f
-            )
-            quadraticTo(
-                size.width * 0.3f,
-                size.height * 0.1f,
-                size.width * 0.5f,
-                size.height * 0.1f
-            )
-            quadraticTo(
-                size.width * 0.7f,
-                size.height * 0.1f,
-                size.width * 0.7f,
-                size.height * 0.2f
-            )
-            lineTo(
-                size.width * 0.7f,
-                size.height * 0.5f
-            )
-            quadraticTo(
-                size.width * 0.7f,
-                size.height * 0.6f,
-                size.width * 0.5f,
-                size.height * 0.6f
-            )
-            quadraticTo(
-                size.width * 0.3f,
-                size.height * 0.6f,
-                size.width * 0.3f,
-                size.height * 0.5f
-            )
-            close()
-        }
-        drawPath(
-            path = phonePath,
-            color = color,
-            style = Stroke(width = grosor)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(88.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(6.dp),
+        color = Color.White,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (selected) azulPrincipal else Gris
         )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (selected) {
+                    Icons.Outlined.CheckCircle
+                } else {
+                    Icons.Outlined.CameraAlt
+                },
+                contentDescription = null,
+                tint = if (selected) azulPrincipal else TextoSecundario,
+                modifier = Modifier.size(25.dp)
+            )
 
-        drawCircle(
-            color = color,
-            radius = 1.dp.toPx(),
-            center = Offset(size.width * 0.5f, size.height * 0.5f)
-        )
-    }
-}
+            Spacer(modifier = Modifier.width(10.dp))
 
-@Composable
-private fun IconoCorreoReg() {
-    Canvas(modifier = Modifier.size(20.dp)) {
-        val color = Gris
-        val grosor = 1.5.dp.toPx()
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(size.width * 0.12f, size.height * 0.22f),
-            size = Size(size.width * 0.76f, size.height * 0.56f),
-            cornerRadius = CornerRadius(2.dp.toPx()),
-            style = Stroke(width = grosor)
-        )
-        drawLine(
-            color = color,
-            start = Offset(size.width * 0.14f, size.height * 0.26f),
-            end = Offset(size.width * 0.50f, size.height * 0.53f),
-            strokeWidth = grosor
-        )
-        drawLine(
-            color = color,
-            start = Offset(size.width * 0.50f, size.height * 0.53f),
-            end = Offset(size.width * 0.86f, size.height * 0.26f),
-            strokeWidth = grosor
-        )
-    }
-}
-
-@Composable
-private fun IconoCandadoReg() {
-    Canvas(modifier = Modifier.size(20.dp)) {
-        val color = Gris
-        val grosor = 1.5.dp.toPx()
-        drawArc(
-            color = color,
-            startAngle = 180f,
-            sweepAngle = 180f,
-            useCenter = false,
-            topLeft = Offset(
-                size.width * 0.30f,
-                size.height * 0.12f
-            ),
-            size = Size(
-                size.width * 0.40f,
-                size.height * 0.60f
-            ),
-            style = Stroke(width = grosor)
-        )
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(
-                size.width * 0.19f,
-                size.height * 0.43f
-            ),
-            size = Size(
-                size.width * 0.62f,
-                size.height * 0.43f
-            ),
-            cornerRadius = CornerRadius(2.dp.toPx()),
-            style = Stroke(width = grosor)
-        )
-        drawCircle(
-            color = color,
-            radius = 1.3.dp.toPx(),
-            center = Offset(
-                size.width * 0.50f,
-                size.height * 0.63f
-            )
-        )
-    }
-}
-
-@Composable
-private fun IconoOjoReg(visible: Boolean) {
-    Canvas(modifier = Modifier.size(20.dp)) {
-        val color = Gris
-        val grosor = 1.5.dp.toPx()
-        val ojo = Path().apply {
-            moveTo(
-                size.width * 0.08f,
-                size.height * 0.50f
-            )
-            quadraticTo(
-                size.width * 0.50f,
-                size.height * 0.05f,
-                size.width * 0.92f,
-                size.height * 0.50f
-            )
-            quadraticTo(
-                size.width * 0.50f,
-                size.height * 0.95f,
-                size.width * 0.08f,
-                size.height * 0.50f
-            )
-        }
-        drawPath(
-            path = ojo,
-            color = color,
-            style = Stroke(width = grosor)
-        )
-        drawCircle(
-            color = color,
-            radius = size.width * 0.12f,
-            center = Offset(
-                size.width * 0.50f,
-                size.height * 0.50f
-            ),
-            style = Stroke(width = grosor)
-        )
-        if (!visible) {
-            drawLine(
-                color = color,
-                start = Offset(
-                    size.width * 0.12f,
-                    size.height * 0.12f
-                ),
-                end = Offset(
-                    size.width * 0.88f,
-                    size.height * 0.88f
-                ),
-                strokeWidth = grosor
-            )
+            Column {
+                Text(
+                    text = if (selected) "Documento seleccionado" else "Toca para seleccionar una foto",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (selected) azulPrincipal else TextoPrincipal
+                )
+                Text(
+                    text = if (selected) "Puedes volver a seleccionarlo" else "Frente o reverso de la cédula",
+                    fontSize = 10.sp,
+                    color = TextoSecundario
+                )
+            }
         }
     }
 }
@@ -718,7 +624,7 @@ private fun IconoOjoReg(visible: Boolean) {
 @Preview(
     showBackground = true,
     showSystemUi = true,
-    name = "Vista previa del registro"
+    name = "Vista previa - Registro organizador"
 )
 @Composable
 private fun RegistroScreenPreview() {

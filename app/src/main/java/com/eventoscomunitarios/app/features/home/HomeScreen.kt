@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -51,6 +52,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventCategory
+import com.eventoscomunitarios.app.domain.model.AppUser
+import com.eventoscomunitarios.app.domain.model.UserRole
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.AzulClaro
 import com.eventoscomunitarios.app.ui.theme.Fondo
@@ -60,10 +63,12 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 
 @Composable
 fun HomeScreen(
+    currentUser: AppUser? = null,
     viewModel: HomeViewModel = viewModel(),
     onAbrirMapa: () -> Unit = {},
     onAbrirMisEventos: () -> Unit = {},
-    onAbrirPerfil: () -> Unit = {}
+    onAbrirPerfil: () -> Unit = {},
+    onCrearEvento: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val azulPrincipal = MaterialTheme.colorScheme.primary
@@ -79,6 +84,28 @@ fun HomeScreen(
                 onAbrirMisEventos = onAbrirMisEventos,
                 onAbrirPerfil = onAbrirPerfil
             )
+        },
+        floatingActionButton = {
+            if (currentUser?.role == UserRole.ORGANIZER) {
+                ExtendedFloatingActionButton(
+                    onClick = onCrearEvento,
+                    icon = {
+                        Text(
+                            text = "+",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Crear evento",
+                            fontSize = 12.sp
+                        )
+                    },
+                    containerColor = azulPrincipal,
+                    contentColor = Color.White
+                )
+            }
         }
     ) { innerPadding ->
         Box(
@@ -86,6 +113,8 @@ fun HomeScreen(
         ) {
             HomeContent(
                 state = state,
+                userName = currentUser?.fullName ?: state.userName,
+                userInitials = currentUser?.initials ?: state.userInitials,
                 onSearchRadiusChange = viewModel::onSearchRadiusChange,
                 onFilterChange = viewModel::onFilterChange,
                 onFavoriteClick = viewModel::onFavoriteClick,
@@ -98,6 +127,8 @@ fun HomeScreen(
 @Composable
 private fun HomeContent(
     state: HomeUiState,
+    userName: String,
+    userInitials: String,
     onSearchRadiusChange: (Float) -> Unit,
     onFilterChange: (HomeFilter) -> Unit,
     onFavoriteClick: (Int) -> Unit,
@@ -126,7 +157,7 @@ private fun HomeContent(
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                            text = "Hola, ${state.userName}",
+                            text = "Hola, $userName",
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Medium,
                             color = TextoPrincipal
@@ -154,7 +185,7 @@ private fun HomeContent(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = state.userInitials,
+                            text = userInitials,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = azulPrincipal

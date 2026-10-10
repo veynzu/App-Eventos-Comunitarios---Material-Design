@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.eventoscomunitarios.app.domain.model.AppUser
 import com.eventoscomunitarios.app.features.home.HomeScreen
 import com.eventoscomunitarios.app.features.login.LoginScreen
 import com.eventoscomunitarios.app.features.onboarding.OnboardingScreen
@@ -41,8 +43,8 @@ class MainActivity : ComponentActivity() {
                     mutableStateOf(false)
                 }
 
-                var mostrarHome by rememberSaveable {
-                    mutableStateOf(false)
+                var usuarioAutenticado by remember {
+                    mutableStateOf<AppUser?>(null)
                 }
 
                 Scaffold(
@@ -52,8 +54,12 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding)
                     ) {
                         when {
-                            mostrarHome -> {
+                            usuarioAutenticado != null -> {
                                 HomeScreen(
+                                    currentUser = usuarioAutenticado,
+                                    onCrearEvento = {
+                                        // Próximo paso: conectar la pantalla CrearEventoScreen.
+                                    },
                                     onAbrirMapa = {},
                                     onAbrirMisEventos = {},
                                     onAbrirPerfil = {}
@@ -64,6 +70,12 @@ class MainActivity : ComponentActivity() {
                                 RegistroScreen(
                                     onNavigateBack = {
                                         mostrarRegistro = false
+                                    },
+                                    onRegistroExitoso = { user ->
+                                        usuarioAutenticado = user
+                                        mostrarRegistro = false
+                                        mostrarRecuperarContrasena = false
+                                        mostrarLogin = false
                                     }
                                 )
                             }
@@ -78,8 +90,8 @@ class MainActivity : ComponentActivity() {
 
                             mostrarLogin -> {
                                 LoginScreen(
-                                    onIniciarSesion = {
-                                        mostrarHome = true
+                                    onIniciarSesion = { user ->
+                                        usuarioAutenticado = user
                                         mostrarLogin = false
                                         mostrarRegistro = false
                                         mostrarRecuperarContrasena = false
