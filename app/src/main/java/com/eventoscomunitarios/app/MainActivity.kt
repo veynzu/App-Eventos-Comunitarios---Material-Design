@@ -13,9 +13,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-
 import com.eventoscomunitarios.app.features.login.LoginScreen
 import com.eventoscomunitarios.app.features.onboarding.OnboardingScreen
+import com.eventoscomunitarios.app.features.recuperar_contrasenia.RecuperarContrasenaScreen
+import com.eventoscomunitarios.app.features.registro.RegistroScreen
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 
 class MainActivity : ComponentActivity() {
@@ -31,23 +32,56 @@ class MainActivity : ComponentActivity() {
                     mutableStateOf(false)
                 }
 
+                var mostrarRegistro by rememberSaveable {
+                    mutableStateOf(false)
+                }
+
+                var mostrarRecuperarContrasena by rememberSaveable {
+                    mutableStateOf(false)
+                }
+
                 Scaffold(
                     modifier = Modifier.fillMaxSize()
                 ) { innerPadding ->
-
                     Box(
                         modifier = Modifier.padding(innerPadding)
                     ) {
-                        if (mostrarLogin) {
-                            LoginScreen(
-                                onIniciarSesion = {}
-                            )
-                        } else {
-                            OnboardingScreen(
-                                onContinuar = {
-                                    mostrarLogin = true
-                                }
-                            )
+                        when {
+                            mostrarRegistro -> {
+                                RegistroScreen(
+                                    onNavigateBack = {
+                                        mostrarRegistro = false
+                                    }
+                                )
+                            }
+
+                            mostrarRecuperarContrasena -> {
+                                RecuperarContrasenaScreen(
+                                    onNavigateBack = {
+                                        mostrarRecuperarContrasena = false
+                                    }
+                                )
+                            }
+
+                            mostrarLogin -> {
+                                LoginScreen(
+                                    onIniciarSesion = {},
+                                    onRecuperarContrasena = {
+                                        mostrarRecuperarContrasena = true
+                                    },
+                                    onCrearCuenta = {
+                                        mostrarRegistro = true
+                                    }
+                                )
+                            }
+
+                            else -> {
+                                OnboardingScreen(
+                                    onContinuar = {
+                                        mostrarLogin = true
+                                    }
+                                )
+                            }
                         }
                     }
                 }
