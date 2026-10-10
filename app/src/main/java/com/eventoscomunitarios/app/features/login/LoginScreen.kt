@@ -63,12 +63,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
-
-private val AzulClaro = Color(0xFFCCE5FF)
-private val TextoPrincipal = Color(0xFF1A1C1E)
-private val TextoSecundario = Color(0xFF42474E)
-private val Gris = Color(0xFF72787E)
-private val Fondo = Color(0xFFF9F9FC)
+import com.eventoscomunitarios.app.ui.theme.AzulClaro
+import com.eventoscomunitarios.app.ui.theme.Fondo
+import com.eventoscomunitarios.app.ui.theme.Gris
+import com.eventoscomunitarios.app.ui.theme.TextoPrincipal
+import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 
 @Composable
 fun LoginScreen(
