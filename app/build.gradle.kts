@@ -9,6 +9,7 @@ android {
         version = release(37)
     }
 
+
     defaultConfig {
         applicationId = "com.eventoscomunitarios.app"
         minSdk = 24
@@ -52,4 +53,5 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
 }
