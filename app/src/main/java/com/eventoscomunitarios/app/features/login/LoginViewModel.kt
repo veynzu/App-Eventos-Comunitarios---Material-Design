@@ -2,6 +2,8 @@ package com.eventoscomunitarios.app.features.login
 
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
+import com.eventoscomunitarios.app.core.data.FakeUsers
+import com.eventoscomunitarios.app.core.util.RequestResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,7 +14,8 @@ data class LoginUiState(
     val password: String = "",
     val recordar: Boolean = true,
     val emailError: String? = null,
-    val passwordError: String? = null
+    val passwordError: String? = null,
+    val loginResult: RequestResult? = null
 ) {
     val isFormValid: Boolean
         get() = email.isNotBlank() &&
@@ -48,6 +51,37 @@ class LoginViewModel : ViewModel() {
     fun onRecordarChange(recordar: Boolean) {
         _uiState.update { state ->
             state.copy(recordar = recordar)
+        }
+    }
+
+    fun login() {
+        val currentState = _uiState.value
+
+        if (!currentState.isFormValid) return
+
+        _uiState.update { state ->
+            state.copy(loginResult = RequestResult.Loading)
+        }
+
+        val credentialsAreValid = FakeUsers.users.any { user ->
+            user.email == currentState.email &&
+                    user.password == currentState.password
+        }
+
+        _uiState.update { state ->
+            state.copy(
+                loginResult = if (credentialsAreValid) {
+                    RequestResult.Success
+                } else {
+                    RequestResult.Failure("Correo o contraseña incorrectos")
+                }
+            )
+        }
+    }
+
+    fun clearLoginResult() {
+        _uiState.update { state ->
+            state.copy(loginResult = null)
         }
     }
 

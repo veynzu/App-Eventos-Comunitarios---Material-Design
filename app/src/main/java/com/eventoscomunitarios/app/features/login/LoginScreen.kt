@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,10 +29,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +61,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 
 private val AzulClaro = Color(0xFFCCE5FF)
@@ -72,16 +78,47 @@ fun LoginScreen(
     onCrearCuenta: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    LoginContent(
-        state = state,
-        onEmailChange = viewModel::onEmailChange,
-        onPasswordChange = viewModel::onPasswordChange,
-        onRecordarChange = viewModel::onRecordarChange,
-        onIniciarSesion = onIniciarSesion,
-        onRecuperarContrasena = onRecuperarContrasena,
-        onCrearCuenta = onCrearCuenta
-    )
+    LaunchedEffect(state.loginResult) {
+        when (val result = state.loginResult) {
+            RequestResult.Success -> {
+                snackbarHostState.showSnackbar("Inicio de sesión exitoso")
+                viewModel.clearLoginResult()
+                onIniciarSesion()
+            }
+
+            is RequestResult.Failure -> {
+                snackbarHostState.showSnackbar(result.message)
+                viewModel.clearLoginResult()
+            }
+
+            RequestResult.Loading,
+            null -> Unit
+        }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            LoginContent(
+                state = state,
+                onEmailChange = viewModel::onEmailChange,
+                onPasswordChange = viewModel::onPasswordChange,
+                onRecordarChange = viewModel::onRecordarChange,
+                onIniciarSesion = viewModel::login,
+                onRecuperarContrasena = onRecuperarContrasena,
+                onCrearCuenta = onCrearCuenta
+            )
+        }
+    }
 }
 
 @Composable
@@ -599,18 +636,9 @@ fun LoginScreenPreview() {
         darkTheme = false,
         dynamicColor = false
     ) {
-        LoginContent(
-            state = LoginUiState(
-                email = "ana.torres@correo.com",
-                password = "12345678",
-                recordar = true
-            ),
-            onEmailChange = {},
-            onPasswordChange = {},
-            onRecordarChange = {},
-            onIniciarSesion = {},
-            onRecuperarContrasena = {},
-            onCrearCuenta = {}
+        LoginScreen(
+            viewModel = remember { LoginViewModel() },
+            onIniciarSesion = {}
         )
     }
 }
