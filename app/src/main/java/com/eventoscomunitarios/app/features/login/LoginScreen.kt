@@ -195,7 +195,7 @@ private fun LoginContent(
                         Text("Correo electrónico")
                     },
                     placeholder = {
-                        Text("ana.torres@correo.com")
+                        Text("example@example.com")
                     },
                     leadingIcon = {
                         IconoCorreo()
@@ -227,7 +227,7 @@ private fun LoginContent(
                     value = state.password,
                     onValueChange = onPasswordChange,
                     label = {
-                        Text("Contraseña")
+                        Text("Password")
                     },
                     leadingIcon = {
                         IconoCandado()
