@@ -10,8 +10,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.eventoscomunitarios.app.R
+import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 
 @Composable
 fun OnboardingScreen(
@@ -47,5 +49,17 @@ fun OnboardingScreen(
         ) {
             Text(text = "Comenzar")
         }
+    }
+}
+
+@Preview(
+    showBackground = true,
+    showSystemUi = true,
+    name = "Vista previa - Onboarding"
+)
+@Composable
+private fun OnboardingScreenPreview() {
+    AppeventoscomunitariosTheme(darkTheme = false, dynamicColor = false) {
+        OnboardingScreen(onContinuar = {})
     }
 }

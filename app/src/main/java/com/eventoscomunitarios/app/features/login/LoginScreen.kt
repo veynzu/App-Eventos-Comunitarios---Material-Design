@@ -62,7 +62,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventoscomunitarios.app.core.util.RequestResult
-import com.eventoscomunitarios.app.domain.model.AppUser
+import com.eventoscomunitarios.app.core.components.LoadingIndicator
+import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.AzulClaro
 import com.eventoscomunitarios.app.ui.theme.Fondo
@@ -73,7 +74,7 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 @Composable
 fun LoginScreen(
     viewModel: LoginViewModel = viewModel(),
-    onIniciarSesion: (AppUser) -> Unit,
+    onIniciarSesion: (User) -> Unit,
     onRecuperarContrasena: () -> Unit = {},
     onCrearCuenta: () -> Unit = {}
 ) {
@@ -83,7 +84,6 @@ fun LoginScreen(
     LaunchedEffect(state.loginResult) {
         when (val result = state.loginResult) {
             RequestResult.Success -> {
-                snackbarHostState.showSnackbar("Inicio de sesión exitoso")
                 val authenticatedUser = state.authenticatedUser
                 viewModel.clearLoginResult()
                 authenticatedUser?.let(onIniciarSesion)
@@ -118,6 +118,7 @@ fun LoginScreen(
                 onRecuperarContrasena = onRecuperarContrasena,
                 onCrearCuenta = onCrearCuenta
             )
+            if (state.loginResult == RequestResult.Loading) LoadingIndicator()
         }
     }
 }
@@ -320,7 +321,7 @@ private fun LoginContent(
 
                 Button(
                     onClick = onIniciarSesion,
-                    enabled = state.isFormValid,
+                    enabled = state.isFormValid && state.loginResult != RequestResult.Loading,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),
@@ -630,16 +631,25 @@ private fun IconoOjo(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(
+    showBackground = true,
+    showSystemUi = true,
+    name = "Vista previa - Login"
+)
 @Composable
 fun LoginScreenPreview() {
     AppeventoscomunitariosTheme(
         darkTheme = false,
         dynamicColor = false
     ) {
-        LoginScreen(
-            viewModel = remember { LoginViewModel() },
-            onIniciarSesion = {}
+        LoginContent(
+            state = LoginUiState(),
+            onEmailChange = {},
+            onPasswordChange = {},
+            onRecordarChange = {},
+            onIniciarSesion = {},
+            onRecuperarContrasena = {},
+            onCrearCuenta = {}
         )
     }
 }

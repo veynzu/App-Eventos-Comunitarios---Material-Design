@@ -455,8 +455,10 @@ private fun RecuperarContrasenaScreenPreview() {
         darkTheme = false,
         dynamicColor = false
     ) {
-        RecuperarContrasenaScreen(
-            viewModel = remember { RecuperarContrasenaViewModel() },
+        RecuperarContrasenaContent(
+            state = RecuperarContrasenaUiState(),
+            onEmailChange = {},
+            onEnviarInstrucciones = {},
             onNavigateBack = {}
         )
     }

@@ -1,6 +1,7 @@
 package com.eventoscomunitarios.app.features.registro
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -72,7 +73,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventoscomunitarios.app.core.util.RequestResult
-import com.eventoscomunitarios.app.domain.model.AppUser
+import com.eventoscomunitarios.app.domain.model.User
+import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.AzulClaro
 import com.eventoscomunitarios.app.ui.theme.Fondo
@@ -84,10 +86,12 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 fun RegistroScreen(
     viewModel: RegistroViewModel = viewModel(),
     onNavigateBack: () -> Unit,
-    onRegistroExitoso: (AppUser) -> Unit = {}
+    onRegistroExitoso: (User) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    BackHandler(enabled = state.currentStep == 2) { viewModel.onBackFromDocuments() }
 
     val frontDocumentPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -104,7 +108,6 @@ fun RegistroScreen(
     LaunchedEffect(state.registroResult) {
         when (val result = state.registroResult) {
             RequestResult.Success -> {
-                snackbarHostState.showSnackbar("Cuenta creada correctamente")
                 val registeredUser = state.registeredUser
                 viewModel.clearRegistroResult()
                 registeredUser?.let(onRegistroExitoso)
@@ -127,31 +130,34 @@ fun RegistroScreen(
         },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { innerPadding ->
-        RegistroContent(
-            state = state,
-            onNavigateBack = {
-                if (state.currentStep == 2) {
-                    viewModel.onBackFromDocuments()
-                } else {
-                    onNavigateBack()
-                }
-            },
-            onNombreChange = viewModel::onNombreChange,
-            onEmailChange = viewModel::onEmailChange,
-            onTelefonoChange = viewModel::onTelefonoChange,
-            onPasswordChange = viewModel::onPasswordChange,
-            onConfirmPasswordChange = viewModel::onConfirmPasswordChange,
-            onAccountTypeChange = viewModel::onAccountTypeChange,
-            onTerminosChange = viewModel::onTerminosChange,
-            onSelectFrontDocument = {
-                frontDocumentPicker.launch("image/*")
-            },
-            onSelectBackDocument = {
-                backDocumentPicker.launch("image/*")
-            },
-            onContinuar = viewModel::onContinuarClick,
-            modifier = Modifier.padding(innerPadding)
-        )
+        Box(modifier = Modifier.padding(innerPadding)) {
+            RegistroContent(
+                state = state,
+                onNavigateBack = {
+                    if (state.currentStep == 2) {
+                        viewModel.onBackFromDocuments()
+                    } else {
+                        onNavigateBack()
+                    }
+                },
+                onNombreChange = viewModel::onNombreChange,
+                onEmailChange = viewModel::onEmailChange,
+                onTelefonoChange = viewModel::onTelefonoChange,
+                onPasswordChange = viewModel::onPasswordChange,
+                onConfirmPasswordChange = viewModel::onConfirmPasswordChange,
+                onAccountTypeChange = viewModel::onAccountTypeChange,
+                onTerminosChange = viewModel::onTerminosChange,
+                onSelectFrontDocument = {
+                    frontDocumentPicker.launch("image/*")
+                },
+                onSelectBackDocument = {
+                    backDocumentPicker.launch("image/*")
+                },
+                onContinuar = viewModel::onContinuarClick,
+                modifier = Modifier
+            )
+            if (state.registroResult == RequestResult.Loading) LoadingIndicator()
+        }
     }
 }
 
@@ -211,7 +217,7 @@ private fun RegistroContent(
             }
 
             LinearProgressIndicator(
-                progress = if (state.currentStep == 2) 1f else 0.5f,
+                progress = { if (state.currentStep == 2) 1f else 0.5f },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(2.dp),
@@ -373,7 +379,7 @@ private fun RegistroContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RoleOption(
-                            text = "Cliente",
+                            text = "Participante",
                             selected = !state.isOrganizer,
                             modifier = Modifier.weight(1f),
                             onClick = {
@@ -407,6 +413,9 @@ private fun RegistroContent(
                             fontSize = 11.sp,
                             color = TextoSecundario
                         )
+                    }
+                    state.terminosError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
                 } else {
                     Text(
@@ -460,6 +469,7 @@ private fun RegistroContent(
             Button(
                 onClick = onContinuar,
                 enabled = state.isFormValid &&
+                        state.registroResult != RequestResult.Loading &&
                         (state.currentStep == 1 || state.documentsAreSelected),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -624,7 +634,7 @@ private fun DocumentoSelector(
 @Preview(
     showBackground = true,
     showSystemUi = true,
-    name = "Vista previa - Registro organizador"
+    name = "Vista previa - Registro"
 )
 @Composable
 private fun RegistroScreenPreview() {
@@ -632,9 +642,19 @@ private fun RegistroScreenPreview() {
         darkTheme = false,
         dynamicColor = false
     ) {
-        RegistroScreen(
-            viewModel = remember { RegistroViewModel() },
-            onNavigateBack = {}
+        RegistroContent(
+            state = RegistroUiState(),
+            onNavigateBack = {},
+            onNombreChange = {},
+            onEmailChange = {},
+            onTelefonoChange = {},
+            onPasswordChange = {},
+            onConfirmPasswordChange = {},
+            onAccountTypeChange = {},
+            onTerminosChange = {},
+            onSelectFrontDocument = {},
+            onSelectBackDocument = {},
+            onContinuar = {}
         )
     }
 }

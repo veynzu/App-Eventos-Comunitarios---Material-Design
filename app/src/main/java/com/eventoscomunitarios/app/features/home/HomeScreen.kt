@@ -20,6 +20,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -32,9 +34,9 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -52,8 +54,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventCategory
-import com.eventoscomunitarios.app.domain.model.AppUser
+import com.eventoscomunitarios.app.core.util.RequestResult
+import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.domain.model.UserRole
+import com.eventoscomunitarios.app.features.auth.FakeUsers
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.AzulClaro
 import com.eventoscomunitarios.app.ui.theme.Fondo
@@ -63,15 +67,69 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 
 @Composable
 fun HomeScreen(
-    currentUser: AppUser? = null,
+    userId: String,
     viewModel: HomeViewModel = viewModel(),
     onAbrirMapa: () -> Unit = {},
     onAbrirMisEventos: () -> Unit = {},
     onAbrirPerfil: () -> Unit = {},
-    onCrearEvento: () -> Unit = {}
+    onCrearEvento: () -> Unit = {},
+    onSessionInvalid: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(userId) { viewModel.loadUser(userId) }
+
+    HomeScreenContent(
+        state = state,
+        onSearchRadiusChange = viewModel::onSearchRadiusChange,
+        onFilterChange = viewModel::onFilterChange,
+        onFavoriteClick = viewModel::onFavoriteClick,
+        onAbrirMapa = onAbrirMapa,
+        onAbrirMisEventos = onAbrirMisEventos,
+        onAbrirPerfil = onAbrirPerfil,
+        onCrearEvento = onCrearEvento,
+        onRetry = { viewModel.loadUser(userId) },
+        onSessionInvalid = onSessionInvalid
+    )
+}
+
+@Composable
+private fun HomeScreenContent(
+    state: HomeUiState,
+    onSearchRadiusChange: (Float) -> Unit,
+    onFilterChange: (HomeFilter) -> Unit,
+    onFavoriteClick: (Int) -> Unit,
+    onAbrirMapa: () -> Unit,
+    onAbrirMisEventos: () -> Unit,
+    onAbrirPerfil: () -> Unit,
+    onCrearEvento: () -> Unit,
+    onRetry: () -> Unit,
+    onSessionInvalid: () -> Unit
+) {
     val azulPrincipal = MaterialTheme.colorScheme.primary
+
+    when (val result = state.loadResult) {
+        RequestResult.Loading -> {
+            LoadingIndicator()
+            return
+        }
+        is RequestResult.Failure -> {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(result.message, style = MaterialTheme.typography.titleMedium)
+                state.userErrors.values.forEach { error ->
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                }
+                Button(onClick = onRetry) { Text("Reintentar") }
+                TextButton(onClick = onSessionInvalid) { Text("Volver al inicio de sesión") }
+            }
+            return
+        }
+        RequestResult.Success -> Unit
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -86,7 +144,7 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            if (currentUser?.role == UserRole.ORGANIZER) {
+            if (state.user?.role == UserRole.ORGANIZER) {
                 ExtendedFloatingActionButton(
                     onClick = onCrearEvento,
                     icon = {
@@ -113,12 +171,13 @@ fun HomeScreen(
         ) {
             HomeContent(
                 state = state,
-                userName = currentUser?.fullName ?: state.userName,
-                userInitials = currentUser?.initials ?: state.userInitials,
-                onSearchRadiusChange = viewModel::onSearchRadiusChange,
-                onFilterChange = viewModel::onFilterChange,
-                onFavoriteClick = viewModel::onFavoriteClick,
-                onAbrirMapa = onAbrirMapa
+                userName = state.userName,
+                userInitials = state.userInitials,
+                onSearchRadiusChange = onSearchRadiusChange,
+                onFilterChange = onFilterChange,
+                onFavoriteClick = onFavoriteClick,
+                onAbrirMapa = onAbrirMapa,
+                onAbrirPerfil = onAbrirPerfil
             )
         }
     }
@@ -132,7 +191,8 @@ private fun HomeContent(
     onSearchRadiusChange: (Float) -> Unit,
     onFilterChange: (HomeFilter) -> Unit,
     onFavoriteClick: (Int) -> Unit,
-    onAbrirMapa: () -> Unit
+    onAbrirMapa: () -> Unit,
+    onAbrirPerfil: () -> Unit
 ) {
     val azulPrincipal = MaterialTheme.colorScheme.primary
 
@@ -181,7 +241,8 @@ private fun HomeContent(
                     Box(
                         modifier = Modifier
                             .size(34.dp)
-                            .background(AzulClaro, CircleShape),
+                            .background(AzulClaro, CircleShape)
+                            .clickable(onClick = onAbrirPerfil),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -889,8 +950,20 @@ private fun HomeScreenPreview() {
         darkTheme = false,
         dynamicColor = false
     ) {
-        HomeScreen(
-            viewModel = remember { HomeViewModel() }
+        HomeScreenContent(
+            state = HomeUiState(
+                user = FakeUsers.users.first(),
+                loadResult = RequestResult.Success
+            ),
+            onSearchRadiusChange = {},
+            onFilterChange = {},
+            onFavoriteClick = {},
+            onAbrirMapa = {},
+            onAbrirMisEventos = {},
+            onAbrirPerfil = {},
+            onCrearEvento = {},
+            onRetry = {},
+            onSessionInvalid = {}
         )
     }
 }

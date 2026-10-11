@@ -2,9 +2,9 @@ package com.eventoscomunitarios.app.features.login
 
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
-import com.eventoscomunitarios.app.core.data.FakeAccounts
+import com.eventoscomunitarios.app.features.auth.FakeUsers
 import com.eventoscomunitarios.app.core.util.RequestResult
-import com.eventoscomunitarios.app.domain.model.AppUser
+import com.eventoscomunitarios.app.domain.model.User
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +17,7 @@ data class LoginUiState(
     val emailError: String? = null,
     val passwordError: String? = null,
     val loginResult: RequestResult? = null,
-    val authenticatedUser: AppUser? = null
+    val authenticatedUser: User? = null
 ) {
     val isFormValid: Boolean
         get() = email.isNotBlank() &&
@@ -58,8 +58,14 @@ class LoginViewModel : ViewModel() {
     }
 
     fun login() {
+        if (_uiState.value.loginResult == RequestResult.Loading) return
+        _uiState.update { state ->
+            state.copy(
+                emailError = validateEmail(state.email),
+                passwordError = validatePassword(state.password)
+            )
+        }
         val currentState = _uiState.value
-
         if (!currentState.isFormValid) return
 
         _uiState.update { state ->
@@ -69,10 +75,10 @@ class LoginViewModel : ViewModel() {
             )
         }
 
-        val authenticatedUser = FakeAccounts.authenticate(
-            email = currentState.email.trim(),
-            password = currentState.password
-        )
+        val authenticatedUser = FakeUsers.users.firstOrNull { user ->
+            user.email.equals(currentState.email.trim(), ignoreCase = true) &&
+                FakeUsers.passwords[user.id] == currentState.password
+        }
 
         _uiState.update { state ->
             state.copy(

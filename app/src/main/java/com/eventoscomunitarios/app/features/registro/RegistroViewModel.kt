@@ -2,15 +2,16 @@ package com.eventoscomunitarios.app.features.registro
 
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
-import com.eventoscomunitarios.app.core.data.FakeAccounts
+import com.eventoscomunitarios.app.features.auth.FakeUsers
 import com.eventoscomunitarios.app.core.util.RequestResult
-import com.eventoscomunitarios.app.domain.model.AccountStatus
-import com.eventoscomunitarios.app.domain.model.AppUser
+import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.domain.model.UserRole
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.util.Date
+import java.util.UUID
 
 data class RegistroUiState(
     val nombre: String = "",
@@ -29,8 +30,9 @@ data class RegistroUiState(
     val passwordError: String? = null,
     val confirmPasswordError: String? = null,
     val documentError: String? = null,
+    val terminosError: String? = null,
     val registroResult: RequestResult? = null,
-    val registeredUser: AppUser? = null
+    val registeredUser: User? = null
 ) {
     val isFormValid: Boolean
         get() = nombre.isNotBlank() &&
@@ -120,7 +122,7 @@ class RegistroViewModel : ViewModel() {
 
     fun onTerminosChange(terminos: Boolean) {
         _uiState.update { state ->
-            state.copy(terminos = terminos)
+            state.copy(terminos = terminos, terminosError = null)
         }
     }
 
@@ -152,6 +154,8 @@ class RegistroViewModel : ViewModel() {
     }
 
     fun onContinuarClick() {
+        if (_uiState.value.registroResult == RequestResult.Loading) return
+        validateForm()
         val currentState = _uiState.value
         if (!currentState.isFormValid) return
 
@@ -165,7 +169,9 @@ class RegistroViewModel : ViewModel() {
         registrar()
     }
 
-    private fun registrar() {
+    fun registrar() {
+        if (_uiState.value.registroResult == RequestResult.Loading) return
+        validateForm()
         val currentState = _uiState.value
 
         if (!currentState.isFormValid) return
@@ -179,38 +185,38 @@ class RegistroViewModel : ViewModel() {
             return
         }
 
-        val user = AppUser(
-            fullName = currentState.nombre.trim(),
-            email = currentState.email.trim(),
-            phone = currentState.telefono.trim(),
+        _uiState.update { it.copy(registroResult = RequestResult.Loading, registeredUser = null) }
+        val email = currentState.email.trim()
+        if (FakeUsers.users.any { it.email.equals(email, ignoreCase = true) }) {
+            val message = "Ya existe una cuenta con ese correo electrónico."
+            _uiState.update {
+                it.copy(emailError = message, registroResult = RequestResult.Failure(message))
+            }
+            return
+        }
+
+        val user = User(
+            id = UUID.randomUUID().toString(),
+            name = currentState.nombre.trim(),
+            email = email,
+            phoneNumber = currentState.telefono.trim(),
             role = if (currentState.isOrganizer) {
                 UserRole.ORGANIZER
             } else {
-                UserRole.CLIENT
+                UserRole.PARTICIPANT
             },
-            cedula = currentState.isOrganizer && currentState.documentsAreSelected,
-            // Por ahora, cliente y organizador terminan con estado "creado".
-            // PENDING_VERIFICATION queda disponible para una etapa posterior.
-            accountStatus = AccountStatus.CREATED
+            registrationDate = Date(),
+            profilePictureUrl = null
         )
 
-        _uiState.update { state ->
-            state.copy(registroResult = RequestResult.Loading)
-        }
-
-        val registered = FakeAccounts.register(
-            user = user,
-            password = currentState.password
-        )
+        // Datos temporales compartidos; todavía no se utiliza una base de datos.
+        FakeUsers.users.add(user)
+        FakeUsers.passwords[user.id] = currentState.password
 
         _uiState.update { state ->
             state.copy(
-                registroResult = if (registered) {
-                    RequestResult.Success
-                } else {
-                    RequestResult.Failure("Ya existe una cuenta con ese correo electrónico.")
-                },
-                registeredUser = if (registered) user else null
+                registroResult = RequestResult.Success,
+                registeredUser = user
             )
         }
     }
@@ -223,6 +229,19 @@ class RegistroViewModel : ViewModel() {
 
     fun resetForm() {
         _uiState.value = RegistroUiState()
+    }
+
+    private fun validateForm() {
+        _uiState.update { state ->
+            state.copy(
+                nombreError = validateNombre(state.nombre),
+                emailError = validateEmail(state.email),
+                telefonoError = validateTelefono(state.telefono),
+                passwordError = validatePassword(state.password),
+                confirmPasswordError = validateConfirmPassword(state.password, state.confirmPassword),
+                terminosError = if (state.terminos) null else "Debes aceptar los términos y condiciones"
+            )
+        }
     }
 
     private fun validateNombre(nombre: String): String? {
@@ -243,10 +262,11 @@ class RegistroViewModel : ViewModel() {
     }
 
     private fun validateTelefono(telefono: String): String? {
-        return if (telefono.isBlank()) {
-            "El teléfono es obligatorio"
-        } else {
-            null
+        return when {
+            telefono.isBlank() -> "El teléfono es obligatorio"
+            !Patterns.PHONE.matcher(telefono.trim()).matches() ||
+                telefono.count { it.isDigit() } !in 7..15 -> "Ingresa un teléfono válido"
+            else -> null
         }
     }
 
