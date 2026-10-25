@@ -44,6 +44,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -73,6 +75,7 @@ fun HomeScreen(
     onAbrirMisEventos: () -> Unit = {},
     onAbrirPerfil: () -> Unit = {},
     onCrearEvento: () -> Unit = {},
+    onEventClick: (Int) -> Unit = {},
     onSessionInvalid: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -88,6 +91,7 @@ fun HomeScreen(
         onAbrirMisEventos = onAbrirMisEventos,
         onAbrirPerfil = onAbrirPerfil,
         onCrearEvento = onCrearEvento,
+        onEventClick = onEventClick,
         onRetry = { viewModel.loadUser(userId) },
         onSessionInvalid = onSessionInvalid
     )
@@ -103,6 +107,7 @@ private fun HomeScreenContent(
     onAbrirMisEventos: () -> Unit,
     onAbrirPerfil: () -> Unit,
     onCrearEvento: () -> Unit,
+    onEventClick: (Int) -> Unit,
     onRetry: () -> Unit,
     onSessionInvalid: () -> Unit
 ) {
@@ -177,7 +182,8 @@ private fun HomeScreenContent(
                 onFilterChange = onFilterChange,
                 onFavoriteClick = onFavoriteClick,
                 onAbrirMapa = onAbrirMapa,
-                onAbrirPerfil = onAbrirPerfil
+                onAbrirPerfil = onAbrirPerfil,
+                onEventClick = onEventClick
             )
         }
     }
@@ -192,7 +198,8 @@ private fun HomeContent(
     onFilterChange: (HomeFilter) -> Unit,
     onFavoriteClick: (Int) -> Unit,
     onAbrirMapa: () -> Unit,
-    onAbrirPerfil: () -> Unit
+    onAbrirPerfil: () -> Unit,
+    onEventClick: (Int) -> Unit
 ) {
     val azulPrincipal = MaterialTheme.colorScheme.primary
 
@@ -411,9 +418,9 @@ private fun HomeContent(
                     EventCard(
                         event = event,
                         isFavorite = event.id in state.favoriteEventIds,
-                        onFavoriteClick = {
-                            onFavoriteClick(event.id)
-                        }
+                        isConfirmed = event.id in state.confirmedEventIds,
+                        onFavoriteClick = { onFavoriteClick(event.id) },
+                        onEventClick = { onEventClick(event.id) }
                     )
                 }
             }
@@ -429,7 +436,9 @@ private fun HomeContent(
 private fun EventCard(
     event: Event,
     isFavorite: Boolean,
-    onFavoriteClick: () -> Unit
+    isConfirmed: Boolean,
+    onFavoriteClick: () -> Unit,
+    onEventClick: () -> Unit
 ) {
     val backgroundIcon = when (event.category) {
         EventCategory.SPORTS -> Color(0xFFD9ECFF)
@@ -440,14 +449,16 @@ private fun EventCard(
     val azulPrincipal = MaterialTheme.colorScheme.primary
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onEventClick),
         shape = RoundedCornerShape(11.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = if (isConfirmed) Color(0xFFC8F6B7) else Color.White
         ),
         border = androidx.compose.foundation.BorderStroke(
             width = 1.dp,
-            color = Color(0xFFE0E6EB)
+            color = if (isConfirmed) Color(0xFF5F9E4B) else Color(0xFFE0E6EB)
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 1.dp
@@ -572,6 +583,14 @@ private fun EventCard(
                         color = TextoSecundario,
                         maxLines = 1
                     )
+
+                    if (isConfirmed) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        IconoCheck(
+                            color = Color(0xFF26733A),
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
                 }
             }
         }
@@ -833,6 +852,18 @@ private fun IconoObjetivo(
 }
 
 @Composable
+private fun IconoCheck(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val path = Path().apply {
+            moveTo(size.width * 0.2f, size.height * 0.5f)
+            lineTo(size.width * 0.45f, size.height * 0.75f)
+            lineTo(size.width * 0.85f, size.height * 0.25f)
+        }
+        drawPath(path, color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+}
+
+@Composable
 private fun EventCategoryIcon(
     category: EventCategory,
     modifier: Modifier = Modifier,
@@ -962,6 +993,7 @@ private fun HomeScreenPreview() {
             onAbrirMisEventos = {},
             onAbrirPerfil = {},
             onCrearEvento = {},
+            onEventClick = {},
             onRetry = {},
             onSessionInvalid = {}
         )

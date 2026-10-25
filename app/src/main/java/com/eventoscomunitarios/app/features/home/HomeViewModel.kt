@@ -29,6 +29,7 @@ data class HomeUiState(
     val searchRadiusKm: Float = 5f,
     val selectedFilter: HomeFilter = HomeFilter.ALL,
     val favoriteEventIds: Set<Int> = emptySet(),
+    val confirmedEventIds: Set<Int> = emptySet(),
     val events: List<Event> = FakeEvents.events
 ) {
     val userName: String get() = user?.name.orEmpty()
@@ -62,7 +63,7 @@ class HomeViewModel : ViewModel() {
                 user = user.takeIf { errors.isEmpty() },
                 userErrors = errors,
                 loadResult = if (errors.isEmpty()) RequestResult.Success
-                    else RequestResult.Failure("No se puede cargar el perfil. Revisa los datos del usuario.")
+                else RequestResult.Failure("No se puede cargar el perfil. Revisa los datos del usuario.")
             )
         }
     }
@@ -82,14 +83,17 @@ class HomeViewModel : ViewModel() {
     fun onFavoriteClick(eventId: Int) {
         _uiState.update { state ->
             val updatedFavorites = state.favoriteEventIds.toMutableSet()
-
-            if (eventId in updatedFavorites) {
-                updatedFavorites.remove(eventId)
-            } else {
-                updatedFavorites.add(eventId)
-            }
-
+            if (eventId in updatedFavorites) updatedFavorites.remove(eventId)
+            else updatedFavorites.add(eventId)
             state.copy(favoriteEventIds = updatedFavorites)
+        }
+    }
+
+    fun onConfirmEvent(eventId: Int) {
+        _uiState.update { state ->
+            val updatedConfirmed = state.confirmedEventIds.toMutableSet()
+            updatedConfirmed.add(eventId)
+            state.copy(confirmedEventIds = updatedConfirmed)
         }
     }
 }
