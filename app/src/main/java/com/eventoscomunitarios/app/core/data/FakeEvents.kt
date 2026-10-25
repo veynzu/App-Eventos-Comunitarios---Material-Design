@@ -5,6 +5,7 @@ import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventCategory
 import com.eventoscomunitarios.app.domain.model.EventRegistration
 import com.eventoscomunitarios.app.domain.model.EventRegistrationStatus
+import com.eventoscomunitarios.app.domain.model.EventModerationStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,6 +58,58 @@ object FakeEvents {
                 capacity = 50,
                 organizerId = "organizer-carlos",
                 organizerName = "Carlos Gómez"
+            ),
+            Event(
+                id = 4,
+                title = "Mercado campesino",
+                dateLabel = "Vie 3 oct",
+                timeLabel = "7:00 a.m.",
+                location = "Plazoleta CAM",
+                distanceKm = 1.7,
+                price = 0,
+                category = EventCategory.CULTURE,
+                attendeeCount = 0,
+                description = "Mercado local con productos frescos de familias campesinas del Quindío.",
+                capacity = 120,
+                organizerId = "organizer-jac-villa",
+                organizerName = "Junta de Acción Comunal La Villa",
+                moderationStatus = EventModerationStatus.PENDING,
+                submittedAtLabel = "hace 2 h"
+            ),
+            Event(
+                id = 5,
+                title = "Taller de reciclaje",
+                dateLabel = "Sáb 4 oct",
+                timeLabel = "9:00 a.m.",
+                location = "Salón comunal",
+                distanceKm = 2.4,
+                price = 0,
+                category = EventCategory.COMMUNITY,
+                attendeeCount = 0,
+                description = "Aprende a separar residuos y transformar materiales reutilizables.",
+                capacity = 35,
+                organizerId = "organizer-carlos",
+                organizerName = "Carlos Gómez",
+                moderationStatus = EventModerationStatus.PENDING,
+                submittedAtLabel = "hace 5 h",
+                submittedByName = "Ana María Torres"
+            ),
+            Event(
+                id = 6,
+                title = "Caminata nocturna",
+                dateLabel = "Sáb 4 oct",
+                timeLabel = "6:00 p.m.",
+                location = "Vía La Patria",
+                distanceKm = 3.2,
+                price = 0,
+                category = EventCategory.SPORTS,
+                attendeeCount = 0,
+                description = "Recorrido guiado para disfrutar el paisaje y la actividad física en comunidad.",
+                capacity = 45,
+                organizerId = "organizer-montana",
+                organizerName = "Colectivo Montaña Viva",
+                moderationStatus = EventModerationStatus.PENDING,
+                submittedAtLabel = "hace 1 d"
             )
         )
     )
@@ -82,4 +135,11 @@ object FakeEvents {
         set(value) {
             _registrations.value = value
         }
+
+    fun updateModerationStatus(eventId: Int, status: EventModerationStatus): Event? {
+        val current = events.firstOrNull { it.id == eventId } ?: return null
+        val updated = current.copy(moderationStatus = status)
+        events = events.map { if (it.id == eventId) updated else it }
+        return updated
+    }
 }

@@ -17,7 +17,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
@@ -31,6 +30,15 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.domain.model.User
+import com.eventoscomunitarios.app.domain.model.UserRole
+import com.eventoscomunitarios.app.features.map.MapScreen
+import com.eventoscomunitarios.app.features.map.MapViewModel
+import com.eventoscomunitarios.app.features.admin_dashboard.AdminDashboardScreen
+import com.eventoscomunitarios.app.features.admin_dashboard.AdminDashboardViewModel
+import com.eventoscomunitarios.app.features.admin_moderation.AdminModerationScreen
+import com.eventoscomunitarios.app.features.admin_moderation.AdminModerationViewModel
+import com.eventoscomunitarios.app.features.admin_users.AdminUsersScreen
+import com.eventoscomunitarios.app.features.admin_users.AdminUsersViewModel
 import com.eventoscomunitarios.app.features.auth.SessionViewModel
 import com.eventoscomunitarios.app.features.home.HomeScreen
 import com.eventoscomunitarios.app.features.home.HomeViewModel
@@ -47,7 +55,6 @@ import com.eventoscomunitarios.app.features.onboarding.OnboardingScreen
 import com.eventoscomunitarios.app.features.profile.ProfileScreen
 import com.eventoscomunitarios.app.features.recuperar_contrasenia.RecuperarContrasenaScreen
 import com.eventoscomunitarios.app.features.registro.RegistroScreen
-import kotlinx.coroutines.launch
 
 @Composable
 fun AppNavigation(sessionViewModel: SessionViewModel = viewModel()) {
@@ -55,7 +62,6 @@ fun AppNavigation(sessionViewModel: SessionViewModel = viewModel()) {
     val session by sessionViewModel.uiState.collectAsState()
     val currentEntry by navController.currentBackStackEntryAsState()
     val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
     val signOut: () -> Unit = {
         sessionViewModel.signOut()
@@ -66,15 +72,16 @@ fun AppNavigation(sessionViewModel: SessionViewModel = viewModel()) {
     }
     val signIn: (User) -> Unit = { user ->
         sessionViewModel.signIn(user)
-        navController.navigate(MainRoutes.Home(user.id)) {
+        val destination = if (user.role == UserRole.ADMINISTRATOR) {
+            MainRoutes.AdminDashboard(user.id)
+        } else {
+            MainRoutes.Home(user.id)
+        }
+        navController.navigate(destination) {
             popUpTo(navController.graph.id) { inclusive = false }
             launchSingleTop = true
         }
     }
-    val upcoming: (String) -> Unit = { name ->
-        scope.launch { snackbar.showSnackbar("$name estará disponible próximamente") }
-    }
-
     LaunchedEffect(currentEntry?.id, session.userId) {
         val entry = currentEntry ?: return@LaunchedEffect
         val routeUserId = when {
@@ -84,6 +91,10 @@ fun AppNavigation(sessionViewModel: SessionViewModel = viewModel()) {
             entry.destination.hasRoute<MainRoutes.EventDetail>() -> entry.toRoute<MainRoutes.EventDetail>().userId
             entry.destination.hasRoute<MainRoutes.CreateEvent>() -> entry.toRoute<MainRoutes.CreateEvent>().userId
             entry.destination.hasRoute<MainRoutes.EditEvent>() -> entry.toRoute<MainRoutes.EditEvent>().userId
+            entry.destination.hasRoute<MainRoutes.Map>() -> entry.toRoute<MainRoutes.Map>().userId
+            entry.destination.hasRoute<MainRoutes.AdminDashboard>() -> entry.toRoute<MainRoutes.AdminDashboard>().userId
+            entry.destination.hasRoute<MainRoutes.AdminModeration>() -> entry.toRoute<MainRoutes.AdminModeration>().userId
+            entry.destination.hasRoute<MainRoutes.AdminUsers>() -> entry.toRoute<MainRoutes.AdminUsers>().userId
             else -> null
         }
         if (routeUserId != null && routeUserId != session.userId) signOut()
@@ -144,7 +155,7 @@ fun AppNavigation(sessionViewModel: SessionViewModel = viewModel()) {
                             viewModel = homeViewModel,
                             onAbrirPerfil = { navController.navigate(MainRoutes.Profile(route.userId)) { launchSingleTop = true } },
                             onSessionInvalid = signOut,
-                            onAbrirMapa = { upcoming("El mapa") },
+                            onAbrirMapa = { navController.navigate(MainRoutes.Map(route.userId)) { launchSingleTop = true } },
                             onAbrirMisEventos = { navController.navigate(MainRoutes.MyEvents(route.userId)) { launchSingleTop = true } },
                             onCrearEvento = { navController.navigate(MainRoutes.CreateEvent(route.userId)) { launchSingleTop = true } },
                             onEventClick = { eventId -> navController.navigate(MainRoutes.EventDetail(eventId, route.userId)) }
@@ -206,6 +217,58 @@ fun AppNavigation(sessionViewModel: SessionViewModel = viewModel()) {
                             userId = route.userId,
                             onNavigateBack = { navController.popBackStack() },
                             onCerrarSesion = signOut
+                        )
+                    }
+                }
+                composable<MainRoutes.Map> { entry ->
+                    val route = entry.toRoute<MainRoutes.Map>()
+                    val mapViewModel: MapViewModel = viewModel(entry)
+                    if (route.userId == session.userId) {
+                        MapScreen(
+                            viewModel = mapViewModel,
+                            onNavigateBack = { navController.popBackStack() },
+                            onHomeClick = { navController.navigate(MainRoutes.Home(route.userId)) { launchSingleTop = true } },
+                            onMyEventsClick = { navController.navigate(MainRoutes.MyEvents(route.userId)) { launchSingleTop = true } },
+                            onProfileClick = { navController.navigate(MainRoutes.Profile(route.userId)) { launchSingleTop = true } },
+                            onEventClick = { eventId -> navController.navigate(MainRoutes.EventDetail(eventId, route.userId)) }
+                        )
+                    }
+                }
+                composable<MainRoutes.AdminDashboard> { entry ->
+                    val route = entry.toRoute<MainRoutes.AdminDashboard>()
+                    val dashboardViewModel: AdminDashboardViewModel = viewModel(entry)
+                    if (route.userId == session.userId) {
+                        AdminDashboardScreen(
+                            viewModel = dashboardViewModel,
+                            onModerationClick = { navController.navigate(MainRoutes.AdminModeration(route.userId)) { launchSingleTop = true } },
+                            onUsersClick = { navController.navigate(MainRoutes.AdminUsers(route.userId)) { launchSingleTop = true } },
+                            onProfileClick = { navController.navigate(MainRoutes.Profile(route.userId)) { launchSingleTop = true } },
+                            onEventDetail = { eventId -> navController.navigate(MainRoutes.EventDetail(eventId, route.userId)) }
+                        )
+                    }
+                }
+                composable<MainRoutes.AdminModeration> { entry ->
+                    val route = entry.toRoute<MainRoutes.AdminModeration>()
+                    val moderationViewModel: AdminModerationViewModel = viewModel(entry)
+                    if (route.userId == session.userId) {
+                        AdminModerationScreen(
+                            viewModel = moderationViewModel,
+                            onDashboardClick = { navController.navigate(MainRoutes.AdminDashboard(route.userId)) { launchSingleTop = true } },
+                            onUsersClick = { navController.navigate(MainRoutes.AdminUsers(route.userId)) { launchSingleTop = true } },
+                            onProfileClick = { navController.navigate(MainRoutes.Profile(route.userId)) { launchSingleTop = true } },
+                            onEventDetail = { eventId -> navController.navigate(MainRoutes.EventDetail(eventId, route.userId)) }
+                        )
+                    }
+                }
+                composable<MainRoutes.AdminUsers> { entry ->
+                    val route = entry.toRoute<MainRoutes.AdminUsers>()
+                    val usersViewModel: AdminUsersViewModel = viewModel(entry)
+                    if (route.userId == session.userId) {
+                        AdminUsersScreen(
+                            viewModel = usersViewModel,
+                            onDashboardClick = { navController.navigate(MainRoutes.AdminDashboard(route.userId)) { launchSingleTop = true } },
+                            onModerationClick = { navController.navigate(MainRoutes.AdminModeration(route.userId)) { launchSingleTop = true } },
+                            onProfileClick = { navController.navigate(MainRoutes.Profile(route.userId)) { launchSingleTop = true } }
                         )
                     }
                 }

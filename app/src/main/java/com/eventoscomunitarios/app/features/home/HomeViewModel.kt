@@ -11,6 +11,7 @@ import com.eventoscomunitarios.app.features.auth.validationErrors
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventCategory
 import com.eventoscomunitarios.app.domain.model.EventRegistrationStatus
+import com.eventoscomunitarios.app.domain.model.EventModerationStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +42,7 @@ data class HomeUiState(
 
     val filteredEvents: List<Event>
         get() = events.filter { event ->
+            if (event.moderationStatus != EventModerationStatus.APPROVED) return@filter false
             val isWithinRadius = event.distanceKm <= searchRadiusKm.toDouble()
             val matchesFilter = when (selectedFilter) {
                 HomeFilter.ALL -> true

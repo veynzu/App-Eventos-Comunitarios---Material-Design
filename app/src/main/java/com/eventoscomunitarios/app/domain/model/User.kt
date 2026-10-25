@@ -11,5 +11,11 @@ data class User(
     val registrationDate: Date,
     val profilePictureUrl: String? = null,
     // Dato adicional que solicita el formulario actual.
-    val phoneNumber: String? = null
+    val phoneNumber: String? = null,
+    val accountStatus: AccountStatus = AccountStatus.ACTIVE
 )
+
+enum class AccountStatus {
+    ACTIVE,
+    SUSPENDED
+}

@@ -146,7 +146,7 @@ private fun EventDetailContent(
             )
         },
         bottomBar = {
-            Surface(color = Color.White, shadowElevation = 8.dp) {
+            if (state.canRegister) Surface(color = Color.White, shadowElevation = 8.dp) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,

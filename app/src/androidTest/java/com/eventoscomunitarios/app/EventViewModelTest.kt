@@ -82,7 +82,7 @@ class EventViewModelTest {
         val organizer = MyEventsViewModel(SavedStateHandle(mapOf("userId" to "organizer-carlos")))
         assertTrue(organizer.uiState.value.enrolledEvents.isEmpty())
         assertEquals(
-            FakeEvents.events.map { it.id }.toSet(),
+            FakeEvents.events.filter { it.organizerId == "organizer-carlos" }.map { it.id }.toSet(),
             organizer.uiState.value.createdEvents.map { it.id }.toSet()
         )
     }
@@ -113,11 +113,11 @@ class EventViewModelTest {
     }
 
     @Test
-    fun fullEventAddsNewUserToWaitlistWithoutIncreasingAttendance() {
+    fun fullEventAddsParticipantToWaitlistWithoutIncreasingAttendance() {
         val fullEvent = FakeEvents.events.first().copy(capacity = FakeEvents.events.first().attendeeCount)
         FakeEvents.events = listOf(fullEvent) + FakeEvents.events.drop(1)
         val viewModel = EventDetailViewModel(
-            SavedStateHandle(mapOf("userId" to "administrator-laura", "eventId" to fullEvent.id))
+            SavedStateHandle(mapOf("userId" to "participant-laura", "eventId" to fullEvent.id))
         )
 
         assertTrue(viewModel.confirmAttendance())
@@ -125,7 +125,7 @@ class EventViewModelTest {
         assertEquals(EventRegistrationStatus.WAITLIST, viewModel.uiState.value.registrationStatus)
         assertEquals(fullEvent.attendeeCount, FakeEvents.events.first().attendeeCount)
         assertTrue(FakeEvents.registrations.any {
-            it.userId == "administrator-laura" &&
+            it.userId == "participant-laura" &&
                 it.eventId == fullEvent.id &&
                 it.status == EventRegistrationStatus.WAITLIST
         })

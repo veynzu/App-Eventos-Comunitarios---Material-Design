@@ -6,6 +6,9 @@ import com.eventoscomunitarios.app.core.data.FakeEvents
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventRegistration
 import com.eventoscomunitarios.app.domain.model.EventRegistrationStatus
+import com.eventoscomunitarios.app.domain.model.EventModerationStatus
+import com.eventoscomunitarios.app.domain.model.UserRole
+import com.eventoscomunitarios.app.features.auth.FakeUsers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +20,8 @@ data class EventDetailUiState(
     val error: String? = null,
     val isFavorite: Boolean = false,
     val isFollowing: Boolean = false,
-    val registrationStatus: EventRegistrationStatus? = null
+    val registrationStatus: EventRegistrationStatus? = null,
+    val canRegister: Boolean = false
 )
 
 class EventDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
@@ -34,6 +38,7 @@ class EventDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
     fun confirmAttendance(): Boolean {
         val currentEvent = _uiState.value.event ?: return false
         val currentUserId = userId ?: return false
+        if (!_uiState.value.canRegister) return false
         val existingRegistration = FakeEvents.registrations.firstOrNull {
             it.userId == currentUserId && it.eventId == currentEvent.id
         }
@@ -80,13 +85,21 @@ class EventDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         }
 
         val event = FakeEvents.events.firstOrNull { it.id == eventId }
+        val user = FakeUsers.users.firstOrNull { it.id == userId }
         val status = FakeEvents.registrations.firstOrNull {
             it.userId == userId && it.eventId == eventId
         }?.status
 
         _uiState.update {
             if (event != null) {
-                it.copy(event = event, isLoading = false, error = null, registrationStatus = status)
+                it.copy(
+                    event = event,
+                    isLoading = false,
+                    error = null,
+                    registrationStatus = status,
+                    canRegister = user?.role == UserRole.PARTICIPANT &&
+                        event.moderationStatus == EventModerationStatus.APPROVED
+                )
             } else {
                 it.copy(isLoading = false, error = "Evento no encontrado")
             }

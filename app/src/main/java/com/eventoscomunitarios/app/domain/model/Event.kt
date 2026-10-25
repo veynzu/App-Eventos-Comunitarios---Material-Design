@@ -15,7 +15,10 @@ data class Event(
     val capacity: Int,
     val organizerId: String,
     val organizerName: String,
-    val photoUri: String? = null
+    val photoUri: String? = null,
+    val moderationStatus: EventModerationStatus = EventModerationStatus.APPROVED,
+    val submittedAtLabel: String = "",
+    val submittedByName: String = organizerName
 ) {
     val isFree: Boolean
         get() = price == 0
@@ -43,4 +46,10 @@ data class EventRegistration(
 enum class EventRegistrationStatus {
     CONFIRMED,
     WAITLIST
+}
+
+enum class EventModerationStatus {
+    PENDING,
+    APPROVED,
+    REJECTED
 }

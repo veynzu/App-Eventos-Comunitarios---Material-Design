@@ -7,6 +7,7 @@ import com.eventoscomunitarios.app.core.data.FakeEvents
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventRegistration
 import com.eventoscomunitarios.app.domain.model.EventRegistrationStatus
+import com.eventoscomunitarios.app.domain.model.EventModerationStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -79,7 +80,9 @@ class MyEventsViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             .asSequence()
             .filter { it.userId == currentUserId }
             .mapNotNull { registration ->
-                eventsById[registration.eventId]?.let { event ->
+                eventsById[registration.eventId]
+                    ?.takeIf { it.moderationStatus == EventModerationStatus.APPROVED }
+                    ?.let { event ->
                     EnrolledEvent(event, registration.status)
                 }
             }

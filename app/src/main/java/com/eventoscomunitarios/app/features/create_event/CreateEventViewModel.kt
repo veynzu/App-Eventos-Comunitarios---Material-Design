@@ -6,6 +6,7 @@ import com.eventoscomunitarios.app.core.data.FakeEvents
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventCategory
+import com.eventoscomunitarios.app.domain.model.EventModerationStatus
 import com.eventoscomunitarios.app.domain.model.UserRole
 import com.eventoscomunitarios.app.features.auth.FakeUsers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -106,7 +107,9 @@ class CreateEventViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             capacity = state.capacity.toInt(),
             organizerId = organizer.id,
             organizerName = organizer.name,
-            photoUri = state.photoUri
+            photoUri = state.photoUri,
+            moderationStatus = EventModerationStatus.PENDING,
+            submittedAtLabel = "ahora"
         )
         FakeEvents.events = FakeEvents.events + event
         _uiState.update { it.copy(publishResult = RequestResult.Success) }

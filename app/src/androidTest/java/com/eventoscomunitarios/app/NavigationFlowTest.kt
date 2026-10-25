@@ -103,6 +103,37 @@ class NavigationFlowTest {
         compose.onNodeWithText("Torneo de microfútbol").assertIsDisplayed()
     }
 
+    @Test
+    fun participantCanOpenMapAndAdministratorGetsAdminNavigation() {
+        loginAs("participant-ana")
+        compose.onNodeWithText("Mapa").performClick()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithTag("event_map").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("event_map").assertIsDisplayed()
+        compose.onNodeWithTag("map_nav_home").performClick()
+        waitForScreen("Hola, Ana María Torres")
+
+        compose.onNodeWithText("Perfil").performClick()
+        waitForScreen("Mi perfil")
+        compose.onNodeWithText("Cerrar sesión").performClick()
+        waitForScreen("Bienvenido de vuelta")
+
+        val admin = FakeUsers.users.first { it.id == "administrator-laura" }
+        compose.onAllNodes(hasSetTextAction())[0].performTextInput(admin.email)
+        compose.onAllNodes(hasSetTextAction())[1].performTextInput(FakeUsers.passwords.getValue(admin.id))
+        compose.onNodeWithText("Iniciar sesión").performScrollTo().assertIsEnabled().performClick()
+        waitForScreen("Panel de control")
+        compose.onNodeWithTag("admin_nav_moderation").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("admin_moderation_screen").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("admin_moderation_screen").assertIsDisplayed()
+        compose.onNodeWithTag("admin_nav_users").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("admin_users_screen").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("admin_users_screen").assertIsDisplayed()
+        compose.onNodeWithTag("admin_nav_profile").performClick()
+        waitForScreen("Mi perfil")
+    }
+
     private fun openLogin() {
         compose.onNodeWithText("Comenzar").performClick()
         waitForScreen("Bienvenido de vuelta")
