@@ -37,9 +37,11 @@ import com.eventoscomunitarios.app.features.home.HomeViewModel
 import com.eventoscomunitarios.app.features.event_detail.EventDetailScreen
 import com.eventoscomunitarios.app.features.event_detail.EventDetailViewModel
 import com.eventoscomunitarios.app.features.create_event.CreateEventScreen
+import com.eventoscomunitarios.app.features.create_event.CreateEventViewModel
 import com.eventoscomunitarios.app.features.edit_event.EditEventScreen
 import com.eventoscomunitarios.app.features.edit_event.EditEventViewModel
 import com.eventoscomunitarios.app.features.my_events.MyEventsScreen
+import com.eventoscomunitarios.app.features.my_events.MyEventsViewModel
 import com.eventoscomunitarios.app.features.login.LoginScreen
 import com.eventoscomunitarios.app.features.onboarding.OnboardingScreen
 import com.eventoscomunitarios.app.features.profile.ProfileScreen
@@ -79,6 +81,9 @@ fun AppNavigation(sessionViewModel: SessionViewModel = viewModel()) {
             entry.destination.hasRoute<MainRoutes.Home>() -> entry.toRoute<MainRoutes.Home>().userId
             entry.destination.hasRoute<MainRoutes.Profile>() -> entry.toRoute<MainRoutes.Profile>().userId
             entry.destination.hasRoute<MainRoutes.MyEvents>() -> entry.toRoute<MainRoutes.MyEvents>().userId
+            entry.destination.hasRoute<MainRoutes.EventDetail>() -> entry.toRoute<MainRoutes.EventDetail>().userId
+            entry.destination.hasRoute<MainRoutes.CreateEvent>() -> entry.toRoute<MainRoutes.CreateEvent>().userId
+            entry.destination.hasRoute<MainRoutes.EditEvent>() -> entry.toRoute<MainRoutes.EditEvent>().userId
             else -> null
         }
         if (routeUserId != null && routeUserId != session.userId) signOut()
@@ -132,15 +137,6 @@ fun AppNavigation(sessionViewModel: SessionViewModel = viewModel()) {
                 composable<MainRoutes.Home> { entry ->
                     val route = entry.toRoute<MainRoutes.Home>()
                     val homeViewModel: HomeViewModel = viewModel(entry)
-                    val savedStateHandle = entry.savedStateHandle
-                    val confirmedEventId by savedStateHandle.getStateFlow<Int?>("confirmed_event", null).collectAsState()
-
-                    LaunchedEffect(confirmedEventId) {
-                        confirmedEventId?.let { id ->
-                            homeViewModel.onConfirmEvent(id)
-                            savedStateHandle.remove<Int>("confirmed_event")
-                        }
-                    }
 
                     if (route.userId == session.userId) {
                         HomeScreen(
@@ -150,44 +146,56 @@ fun AppNavigation(sessionViewModel: SessionViewModel = viewModel()) {
                             onSessionInvalid = signOut,
                             onAbrirMapa = { upcoming("El mapa") },
                             onAbrirMisEventos = { navController.navigate(MainRoutes.MyEvents(route.userId)) { launchSingleTop = true } },
-                            onCrearEvento = { navController.navigate(MainRoutes.CreateEvent) { launchSingleTop = true } },
-                            onEventClick = { eventId -> navController.navigate(MainRoutes.EventDetail(eventId)) }
+                            onCrearEvento = { navController.navigate(MainRoutes.CreateEvent(route.userId)) { launchSingleTop = true } },
+                            onEventClick = { eventId -> navController.navigate(MainRoutes.EventDetail(eventId, route.userId)) }
                         )
                     }
                 }
                 composable<MainRoutes.EventDetail> { entry ->
+                    val route = entry.toRoute<MainRoutes.EventDetail>()
                     val eventDetailViewModel: EventDetailViewModel = viewModel(entry)
 
-                    EventDetailScreen(
-                        viewModel = eventDetailViewModel,
-                        onNavigateBack = { navController.popBackStack() },
-                        onConfirm = { confirmedId ->
-                            navController.previousBackStackEntry?.savedStateHandle?.set("confirmed_event", confirmedId)
-                            navController.popBackStack()
-                        }
-                    )
+                    if (route.userId == session.userId) {
+                        EventDetailScreen(
+                            viewModel = eventDetailViewModel,
+                            onNavigateBack = { navController.popBackStack() },
+                            onConfirm = { navController.popBackStack() }
+                        )
+                    }
                 }
-                composable<MainRoutes.CreateEvent> {
-                    CreateEventScreen(
-                        onCloseClick = { navController.popBackStack() },
-                        onEventCreated = { navController.popBackStack() }
-                    )
+                composable<MainRoutes.CreateEvent> { entry ->
+                    val route = entry.toRoute<MainRoutes.CreateEvent>()
+                    val createEventViewModel: CreateEventViewModel = viewModel(entry)
+                    if (route.userId == session.userId) {
+                        CreateEventScreen(
+                            viewModel = createEventViewModel,
+                            onCloseClick = { navController.popBackStack() },
+                            onEventCreated = { navController.popBackStack() }
+                        )
+                    }
                 }
                 composable<MainRoutes.EditEvent> { entry ->
+                    val route = entry.toRoute<MainRoutes.EditEvent>()
                     val editEventViewModel: EditEventViewModel = viewModel(entry)
 
-                    EditEventScreen(
-                        viewModel = editEventViewModel,
-                        onCloseClick = { navController.popBackStack() },
-                        onChangesSaved = { navController.popBackStack() }
-                    )
+                    if (route.userId == session.userId) {
+                        EditEventScreen(
+                            viewModel = editEventViewModel,
+                            onCloseClick = { navController.popBackStack() },
+                            onChangesSaved = { navController.popBackStack() }
+                        )
+                    }
                 }
                 composable<MainRoutes.MyEvents> { entry ->
                     val route = entry.toRoute<MainRoutes.MyEvents>()
+                    val myEventsViewModel: MyEventsViewModel = viewModel(entry)
                     if (route.userId == session.userId) {
                         MyEventsScreen(
+                            viewModel = myEventsViewModel,
                             onNavigateBack = { navController.popBackStack() },
-                            onAdministrarClick = { eventId -> navController.navigate(MainRoutes.EditEvent(eventId)) }
+                            onAdministrarClick = { eventId ->
+                                navController.navigate(MainRoutes.EditEvent(eventId, route.userId))
+                            }
                         )
                     }
                 }

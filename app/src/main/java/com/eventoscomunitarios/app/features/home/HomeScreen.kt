@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -152,6 +153,7 @@ private fun HomeScreenContent(
             if (state.user?.role == UserRole.ORGANIZER) {
                 ExtendedFloatingActionButton(
                     onClick = onCrearEvento,
+                    modifier = Modifier.testTag("create_event_button"),
                     icon = {
                         Text(
                             text = "+",

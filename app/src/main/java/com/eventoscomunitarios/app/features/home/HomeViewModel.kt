@@ -1,6 +1,7 @@
 package com.eventoscomunitarios.app.features.home
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.eventoscomunitarios.app.core.data.FakeEvents
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.core.util.initials
@@ -9,10 +10,13 @@ import com.eventoscomunitarios.app.features.auth.FakeUsers
 import com.eventoscomunitarios.app.features.auth.validationErrors
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventCategory
+import com.eventoscomunitarios.app.domain.model.EventRegistrationStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 
 enum class HomeFilter(val label: String) {
     ALL("Todos"),
@@ -51,10 +55,33 @@ data class HomeUiState(
 
 class HomeViewModel : ViewModel() {
 
+    private var currentUserId: String? = null
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    init {
+        viewModelScope.launch {
+            combine(FakeEvents.eventsFlow, FakeEvents.registrationsFlow) { events, registrations ->
+                events to registrations
+            }.collect { (events, registrations) ->
+                val userId = currentUserId
+                _uiState.update { state ->
+                    state.copy(
+                        events = events,
+                        confirmedEventIds = registrations
+                            .filter {
+                                it.userId == userId &&
+                                    it.status == EventRegistrationStatus.CONFIRMED
+                            }
+                            .mapTo(mutableSetOf()) { it.eventId }
+                    )
+                }
+            }
+        }
+    }
+
     fun loadUser(userId: String) {
+        currentUserId = userId
         _uiState.update { it.copy(user = null, loadResult = RequestResult.Loading, userErrors = emptyMap()) }
         val user = FakeUsers.users.firstOrNull { it.id == userId }
         val errors = user?.validationErrors() ?: mapOf("user" to "No se encontró el usuario de esta sesión")
@@ -62,6 +89,13 @@ class HomeViewModel : ViewModel() {
             it.copy(
                 user = user.takeIf { errors.isEmpty() },
                 userErrors = errors,
+                events = FakeEvents.events,
+                confirmedEventIds = FakeEvents.registrations
+                    .filter {
+                        it.userId == userId &&
+                            it.status == EventRegistrationStatus.CONFIRMED
+                    }
+                    .mapTo(mutableSetOf()) { it.eventId },
                 loadResult = if (errors.isEmpty()) RequestResult.Success
                 else RequestResult.Failure("No se puede cargar el perfil. Revisa los datos del usuario.")
             )
@@ -89,11 +123,4 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    fun onConfirmEvent(eventId: Int) {
-        _uiState.update { state ->
-            val updatedConfirmed = state.confirmedEventIds.toMutableSet()
-            updatedConfirmed.add(eventId)
-            state.copy(confirmedEventIds = updatedConfirmed)
-        }
-    }
 }

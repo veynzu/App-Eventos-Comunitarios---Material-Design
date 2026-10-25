@@ -1,6 +1,7 @@
 package com.eventoscomunitarios.app.features.event_detail
 
-import android.widget.Toast
+import android.content.Intent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +25,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,7 +48,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.core.data.FakeEvents
+import com.eventoscomunitarios.app.core.util.initials
 import com.eventoscomunitarios.app.domain.model.EventCategory
+import com.eventoscomunitarios.app.domain.model.EventRegistrationStatus
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.TextoPrincipal
 import com.eventoscomunitarios.app.ui.theme.TextoSecundario
@@ -64,11 +67,22 @@ fun EventDetailScreen(
     EventDetailContent(
         state = state,
         onNavigateBack = onNavigateBack,
-        onConfirm = onConfirm,
-        onToggleFavorite = { viewModel.toggleFavorite() },
-        onToggleFollow = { viewModel.toggleFollow() },
+        onConfirm = { eventId ->
+            if (viewModel.confirmAttendance()) onConfirm(eventId)
+        },
+        onToggleFavorite = viewModel::toggleFavorite,
+        onToggleFollow = viewModel::toggleFollow,
         onShareClick = {
-            Toast.makeText(context, "Enlace copiado con éxito", Toast.LENGTH_SHORT).show()
+            state.event?.let { event ->
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(
+                        Intent.EXTRA_TEXT,
+                        "${event.title}\n${event.dateLabel}, ${event.timeLabel}\n${event.location}"
+                    )
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "Compartir evento"))
+            }
         }
     )
 }
@@ -101,11 +115,16 @@ private fun EventDetailContent(
         EventCategory.CULTURE -> Color(0xFFEEDFFF)
         EventCategory.COMMUNITY -> Color(0xFFDDEFEA)
     }
+    val registrationText = when (state.registrationStatus) {
+        EventRegistrationStatus.CONFIRMED -> "Asistencia confirmada"
+        EventRegistrationStatus.WAITLIST -> "En lista de espera"
+        null -> "Confirmar asistencia"
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { },
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
@@ -123,22 +142,13 @@ private fun EventDetailContent(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = headerBackground,
-                    navigationIconContentColor = TextoPrincipal,
-                    actionIconContentColor = TextoPrincipal
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = headerBackground)
             )
         },
         bottomBar = {
-            Surface(
-                color = Color.White,
-                shadowElevation = 8.dp
-            ) {
+            Surface(color = Color.White, shadowElevation = 8.dp) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -153,10 +163,11 @@ private fun EventDetailContent(
                     }
                     Button(
                         onClick = { onConfirm(event.id) },
+                        enabled = state.registrationStatus == null,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B5B7E)),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Confirmar asistencia", modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                        Text(registrationText, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
                 }
             }
@@ -166,57 +177,55 @@ private fun EventDetailContent(
             modifier = Modifier
                 .fillMaxSize()
                 .background(headerBackground)
-                .padding(bottom = paddingValues.calculateBottomPadding())
+                .padding(top = paddingValues.calculateTopPadding(), bottom = paddingValues.calculateBottomPadding())
         ) {
             Spacer(modifier = Modifier.height(24.dp))
-
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                 color = Color.White
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(24.dp)
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TagBadge(text = if (event.category == EventCategory.SPORTS) "Deportes" else "Comunidad", color = Color(0xFFE4F0FF))
-                        if (event.isFree) {
-                            TagBadge(text = "Gratis", color = Color(0xFFDDF4D6))
-                        }
+                        TagBadge(text = event.category.displayName, color = Color(0xFFE4F0FF))
+                        if (event.isFree) TagBadge(text = "Gratis", color = Color(0xFFDDF4D6))
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = event.title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                    Text(text = "Copa comunitaria La Castilla 2026", fontSize = 14.sp, color = TextoSecundario)
+                    Text(event.title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextoPrincipal)
 
                     Spacer(modifier = Modifier.height(24.dp))
-                    InfoRow(title = "${event.dateLabel} de septiembre", subtitle = "${event.timeLabel} - 7:00 p.m.")
+                    InfoRow(title = event.dateLabel, subtitle = event.timeLabel)
                     Spacer(modifier = Modifier.height(16.dp))
-                    InfoRow(title = "${event.location}, cancha 2", subtitle = "Cra 14 #12-45 - a ${event.distanceKm} km de ti")
+                    InfoRow(title = event.location, subtitle = "A ${formatDistance(event.distanceKm)} km de ti")
                     Spacer(modifier = Modifier.height(16.dp))
-                    InfoRow(title = "${event.attendeeCount} asistentes confirmados", subtitle = "Cupo máximo 60 personas")
+                    InfoRow(
+                        title = "${event.attendeeCount} asistentes confirmados",
+                        subtitle = "Cupo máximo ${event.capacity} personas"
+                    )
 
                     Spacer(modifier = Modifier.height(24.dp))
-                    Divider(color = Color(0xFFE0E6EB))
+                    HorizontalDivider(color = Color(0xFFE0E6EB))
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Text(text = "Organiza", fontSize = 14.sp, color = TextoPrincipal, fontWeight = FontWeight.SemiBold)
+                    Text("Organiza", fontSize = 14.sp, color = TextoPrincipal, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier.size(40.dp).background(Color(0xFFEEDFFF), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("JC", color = Color(0xFF6941A5), fontWeight = FontWeight.Bold)
+                            Text(event.organizerName.initials(), color = Color(0xFF6941A5), fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Junta de Acción Comunal", fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                            Text("Verificado · 12 eventos", fontSize = 12.sp, color = TextoSecundario)
-                        }
+                        Text(
+                            event.organizerName,
+                            modifier = Modifier.weight(1f),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp
+                        )
                         Button(
                             onClick = onToggleFollow,
                             colors = if (state.isFollowing) {
@@ -224,17 +233,17 @@ private fun EventDetailContent(
                             } else {
                                 ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF2B5B7E))
                             },
-                            border = if (state.isFollowing) null else androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2B5B7E))
+                            border = if (state.isFollowing) null else BorderStroke(1.dp, Color(0xFF2B5B7E))
                         ) {
                             Text(if (state.isFollowing) "Siguiendo" else "Seguir", fontSize = 12.sp)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text(text = "Descripción", fontSize = 14.sp, color = TextoPrincipal, fontWeight = FontWeight.SemiBold)
+                    Text("Descripción", fontSize = 14.sp, color = TextoPrincipal, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Torneo abierto para equipos del barrio. Inscribe tu equipo de 5 jugadores. Habrá hidratación y premiación para los tres primeros puestos.",
+                        text = event.description.ifBlank { "Sin descripción" },
                         fontSize = 14.sp,
                         color = TextoSecundario,
                         lineHeight = 20.sp
@@ -248,7 +257,7 @@ private fun EventDetailContent(
 @Composable
 private fun TagBadge(text: String, color: Color) {
     Surface(color = color, shape = RoundedCornerShape(12.dp)) {
-        Text(text = text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = TextoPrincipal)
+        Text(text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp)
     }
 }
 
@@ -258,29 +267,21 @@ private fun InfoRow(title: String, subtitle: String) {
         Box(modifier = Modifier.size(40.dp).background(Color(0xFFF0F4F8), RoundedCornerShape(8.dp)))
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextoPrincipal)
-            Text(text = subtitle, fontSize = 12.sp, color = TextoSecundario)
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextoPrincipal)
+            Text(subtitle, fontSize = 12.sp, color = TextoSecundario)
         }
     }
 }
 
-@Preview(
-    showBackground = true,
-    showSystemUi = true,
-    name = "Vista previa - Detalle"
-)
+private fun formatDistance(distanceKm: Double): String =
+    if (distanceKm % 1.0 == 0.0) distanceKm.toInt().toString() else distanceKm.toString()
+
+@Preview(showBackground = true, showSystemUi = true, name = "Vista previa - Detalle")
 @Composable
 private fun EventDetailScreenPreview() {
-    AppeventoscomunitariosTheme(
-        darkTheme = false,
-        dynamicColor = false
-    ) {
+    AppeventoscomunitariosTheme(darkTheme = false, dynamicColor = false) {
         EventDetailContent(
-            state = EventDetailUiState(
-                event = FakeEvents.events.first(),
-                isLoading = false,
-                error = null
-            ),
+            state = EventDetailUiState(event = FakeEvents.events.first(), isLoading = false),
             onNavigateBack = {},
             onConfirm = {},
             onToggleFavorite = {},

@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eventoscomunitarios.app.domain.model.Event
+import com.eventoscomunitarios.app.domain.model.EventRegistrationStatus
+import com.eventoscomunitarios.app.core.data.FakeEvents
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.TextoPrincipal
 import com.eventoscomunitarios.app.ui.theme.TextoSecundario
@@ -58,6 +60,24 @@ fun MyEventsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    MyEventsContent(
+        state = state,
+        onNavigateBack = onNavigateBack,
+        onTabSelected = viewModel::onTabSelected,
+        onCancelEnrollment = viewModel::cancelEnrollment,
+        onAdministrarClick = onAdministrarClick
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MyEventsContent(
+    state: MyEventsUiState,
+    onNavigateBack: () -> Unit,
+    onTabSelected: (MyEventsTab) -> Unit,
+    onCancelEnrollment: (Int) -> Unit,
+    onAdministrarClick: (Int) -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -84,12 +104,12 @@ fun MyEventsScreen(
             ) {
                 Tab(
                     selected = state.selectedTab == MyEventsTab.ENROLLED,
-                    onClick = { viewModel.onTabSelected(MyEventsTab.ENROLLED) },
+                    onClick = { onTabSelected(MyEventsTab.ENROLLED) },
                     text = { Text("Inscritos") }
                 )
                 Tab(
                     selected = state.selectedTab == MyEventsTab.CREATED,
-                    onClick = { viewModel.onTabSelected(MyEventsTab.CREATED) },
+                    onClick = { onTabSelected(MyEventsTab.CREATED) },
                     text = { Text("Creados") }
                 )
             }
@@ -100,14 +120,16 @@ fun MyEventsScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (state.selectedTab == MyEventsTab.ENROLLED) {
+                if (state.error != null) {
+                    item { EmptyStateText(state.error) }
+                } else if (state.selectedTab == MyEventsTab.ENROLLED) {
                     if (state.enrolledEvents.isEmpty()) {
                         item { EmptyStateText("No estás inscrito en ningún evento.") }
                     } else {
                         items(state.enrolledEvents, key = { it.event.id }) { enrolled ->
                             EnrolledEventCard(
                                 enrolledEvent = enrolled,
-                                onCancel = { viewModel.cancelEnrollment(enrolled.event.id) }
+                                onCancel = { onCancelEnrollment(enrolled.event.id) }
                             )
                         }
                     }
@@ -178,7 +200,7 @@ private fun EnrolledEventCard(enrolledEvent: EnrolledEvent, onCancel: () -> Unit
             }
 
             Column(horizontalAlignment = Alignment.End) {
-                val isConfirmed = enrolledEvent.status == EnrollmentStatus.CONFIRMED
+                val isConfirmed = enrolledEvent.status == EventRegistrationStatus.CONFIRMED
                 val bgStatus = if (isConfirmed) Color(0xFFBFF2B2) else Color(0xFFFFDAB3)
                 val textStatusColor = if (isConfirmed) Color(0xFF1B5E20) else Color(0xFF8D4004)
                 val textStatus = if (isConfirmed) "Confirmado" else "En espera"
@@ -282,6 +304,17 @@ private fun EmptyStateText(message: String) {
 @Composable
 private fun MyEventsScreenPreview() {
     AppeventoscomunitariosTheme {
-        MyEventsScreen(onNavigateBack = {}, onAdministrarClick = {})
+        MyEventsContent(
+            state = MyEventsUiState(
+                enrolledEvents = listOf(
+                    EnrolledEvent(FakeEvents.events.first(), EventRegistrationStatus.CONFIRMED)
+                ),
+                createdEvents = listOf(FakeEvents.events.first())
+            ),
+            onNavigateBack = {},
+            onTabSelected = {},
+            onCancelEnrollment = {},
+            onAdministrarClick = {}
+        )
     }
 }

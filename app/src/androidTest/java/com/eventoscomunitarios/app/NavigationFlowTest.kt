@@ -69,9 +69,53 @@ class NavigationFlowTest {
         waitForScreen("Bienvenido de vuelta")
     }
 
+    @Test
+    fun participantSeesOnlyEnrolledEventsAndCannotManageCreatedEvents() {
+        val participant = FakeUsers.users.first { it.id == "participant-ana" }
+        loginAs(participant.id)
+        compose.onNodeWithTag("create_event_button").assertDoesNotExist()
+
+        compose.onNodeWithText("Mis eventos").performClick()
+        waitForScreen("Mis eventos")
+        compose.onNodeWithText("Torneo de microfútbol").assertIsDisplayed()
+        compose.onNodeWithText("Club de lectura barrial").assertIsDisplayed()
+
+        compose.onNodeWithText("Creados").performClick()
+        compose.onNodeWithText("Aún no has creado ningún evento.").assertIsDisplayed()
+        compose.onNodeWithText("Administrar").assertDoesNotExist()
+    }
+
+    @Test
+    fun organizerCanOpenCreateAndEditOnlyOwnedEvents() {
+        loginAs("organizer-carlos")
+
+        compose.onNodeWithTag("create_event_button").assertIsDisplayed().performClick()
+        waitForScreen("Crear evento")
+        pressBack()
+        waitForScreen("Hola, Carlos Gómez")
+
+        compose.onNodeWithText("Mis eventos").performClick()
+        waitForScreen("Mis eventos")
+        compose.onNodeWithText("No estás inscrito en ningún evento.").assertIsDisplayed()
+        compose.onNodeWithText("Creados").performClick()
+        compose.onAllNodesWithText("Administrar")[0].assertIsDisplayed().performClick()
+        waitForScreen("Editar evento")
+        compose.onNodeWithText("Torneo de microfútbol").assertIsDisplayed()
+    }
+
     private fun openLogin() {
         compose.onNodeWithText("Comenzar").performClick()
         waitForScreen("Bienvenido de vuelta")
+    }
+
+    private fun loginAs(userId: String) {
+        openLogin()
+        val user = FakeUsers.users.first { it.id == userId }
+        compose.onAllNodes(hasSetTextAction())[0].performTextInput(user.email)
+        compose.onAllNodes(hasSetTextAction())[1].performTextInput(FakeUsers.passwords.getValue(user.id))
+        compose.onAllNodes(hasSetTextAction())[1].performImeAction()
+        compose.onNodeWithText("Iniciar sesión").performScrollTo().assertIsEnabled().performClick()
+        waitForScreen("Hola, ${user.name}")
     }
 
     private fun waitForScreen(text: String) {

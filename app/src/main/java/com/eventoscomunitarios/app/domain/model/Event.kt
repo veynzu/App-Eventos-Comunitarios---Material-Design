@@ -10,7 +10,12 @@ data class Event(
     val distanceKm: Double,
     val price: Int,
     val category: EventCategory,
-    val attendeeCount: Int
+    val attendeeCount: Int,
+    val description: String,
+    val capacity: Int,
+    val organizerId: String,
+    val organizerName: String,
+    val photoUri: String? = null
 ) {
     val isFree: Boolean
         get() = price == 0
@@ -19,5 +24,23 @@ data class Event(
 enum class EventCategory {
     SPORTS,
     CULTURE,
-    COMMUNITY
+    COMMUNITY;
+
+    val displayName: String
+        get() = when (this) {
+            SPORTS -> "Deportes"
+            CULTURE -> "Cultura"
+            COMMUNITY -> "Comunidad"
+        }
+}
+
+data class EventRegistration(
+    val userId: String,
+    val eventId: Int,
+    val status: EventRegistrationStatus
+)
+
+enum class EventRegistrationStatus {
+    CONFIRMED,
+    WAITLIST
 }
