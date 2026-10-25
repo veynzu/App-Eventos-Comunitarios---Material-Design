@@ -27,7 +27,9 @@ object FakeEvents {
                 description = "Torneo abierto para equipos del barrio. Inscribe tu equipo de cinco jugadores.",
                 capacity = 60,
                 organizerId = "organizer-carlos",
-                organizerName = "Carlos Gómez"
+                organizerName = "Carlos Gómez",
+                latitude = 4.5352,
+                longitude = -75.6753
             ),
             Event(
                 id = 2,
@@ -42,7 +44,9 @@ object FakeEvents {
                 description = "Encuentro para conversar sobre literatura y compartir nuevas lecturas.",
                 capacity = 30,
                 organizerId = "organizer-carlos",
-                organizerName = "Carlos Gómez"
+                organizerName = "Carlos Gómez",
+                latitude = 4.5368,
+                longitude = -75.6817
             ),
             Event(
                 id = 3,
@@ -57,7 +61,9 @@ object FakeEvents {
                 description = "Jornada comunitaria para recolectar y clasificar materiales reciclables.",
                 capacity = 50,
                 organizerId = "organizer-carlos",
-                organizerName = "Carlos Gómez"
+                organizerName = "Carlos Gómez",
+                latitude = 4.5289,
+                longitude = -75.6780
             ),
             Event(
                 id = 4,
@@ -74,7 +80,9 @@ object FakeEvents {
                 organizerId = "organizer-jac-villa",
                 organizerName = "Junta de Acción Comunal La Villa",
                 moderationStatus = EventModerationStatus.PENDING,
-                submittedAtLabel = "hace 2 h"
+                submittedAtLabel = "hace 2 h",
+                latitude = 4.5387,
+                longitude = -75.6724
             ),
             Event(
                 id = 5,
@@ -92,7 +100,9 @@ object FakeEvents {
                 organizerName = "Carlos Gómez",
                 moderationStatus = EventModerationStatus.PENDING,
                 submittedAtLabel = "hace 5 h",
-                submittedByName = "Ana María Torres"
+                submittedByName = "Ana María Torres",
+                latitude = 4.5312,
+                longitude = -75.6880
             ),
             Event(
                 id = 6,
@@ -109,7 +119,9 @@ object FakeEvents {
                 organizerId = "organizer-montana",
                 organizerName = "Colectivo Montaña Viva",
                 moderationStatus = EventModerationStatus.PENDING,
-                submittedAtLabel = "hace 1 d"
+                submittedAtLabel = "hace 1 d",
+                latitude = 4.5441,
+                longitude = -75.6922
             )
         )
     )

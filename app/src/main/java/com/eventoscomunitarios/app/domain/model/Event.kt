@@ -18,7 +18,9 @@ data class Event(
     val photoUri: String? = null,
     val moderationStatus: EventModerationStatus = EventModerationStatus.APPROVED,
     val submittedAtLabel: String = "",
-    val submittedByName: String = organizerName
+    val submittedByName: String = organizerName,
+    val latitude: Double = 4.5339,
+    val longitude: Double = -75.6811
 ) {
     val isFree: Boolean
         get() = price == 0

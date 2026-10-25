@@ -157,7 +157,8 @@ private fun MapContent(
                 events = state.visibleEvents,
                 selectedEventId = state.selectedEventId,
                 onEventSelected = onEventSelected,
-                onCenterClick = onCenterClick
+                onCenterClick = onCenterClick,
+                radiusKm = state.radiusKm
             )
 
             Row(
