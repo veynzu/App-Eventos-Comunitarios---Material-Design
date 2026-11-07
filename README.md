@@ -24,7 +24,15 @@ En la consola deben estar disponibles:
 2. Firestore en la base predeterminada `(default)`.
 3. El bucket `share-you-6a706.firebasestorage.app` de Storage; el servicio requiere el plan Blaze.
 
-**Las reglas del proyecto quedan para la siguiente etapa, por solicitud del usuario.** Este cambio no publica reglas, no habilita acceso público ni modifica facturación. Si las reglas actuales deniegan una operación, la aplicación muestra el error correspondiente. La configuración local del SDK no demuestra que los servicios o sus permisos estén habilitados en la nube.
+`firestore.rules` contiene reglas iniciales para ingreso, registro, edición del perfil propio, suspensión por moderadores y lectura de las colecciones que consulta la app. Para aplicarlas, abrir **Firebase Console → Firestore Database → Reglas**, reemplazar el contenido con el archivo completo y pulsar **Publicar**. Guardar el archivo local o compilar la APK no publica las reglas. No se han desplegado cambios desde este repositorio.
+
+Estas reglas **no autorizan todavía escrituras de eventos, inscripciones, contadores ni interacciones**; esas operaciones seguirán siendo rechazadas hasta definir sus permisos específicos. No usar `allow read, write: if true` ni dar escritura global a cualquier usuario autenticado: eso permitiría modificar roles y datos ajenos. La app actual escucha toda la colección `users`, por lo que la lectura de perfiles permite a otros usuarios autenticados leer también correo y teléfono. Separar los datos privados exige ajustar ese esquema y las consultas. Las notificaciones solo se leen por su destinatario.
+
+Para comprobar estas reglas sin tocar Firebase real, ejecutar `./scripts/test-firestore-rules.ps1` con Firebase CLI, Node y un JDK completo instalados. Usa exclusivamente el proyecto ficticio `demo-share-you-rules` y los puertos locales 19099 (Auth) y 18080 (Firestore). Las reglas abiertas del script de integración anterior son fixtures locales y no deben publicarse.
+
+`storage.rules` se publica por separado en **Firebase Console → Storage → Reglas → Publicar**. Autoriza consultar fotos a usuarios autenticados y crear imágenes de hasta 10 MB en `profiles/{uid}/{archivo}` y `events/{uid}/{archivo}`, solo cuando el UID y el metadato `ownerId` corresponden al usuario conectado. Solo el dueño de la carpeta puede borrar sus imágenes. Cada subida usa un UUID nuevo: los listados, las sobrescrituras y las demás rutas están denegados. La limpieza de imágenes ajenas por un moderador requiere un proceso con permisos propios; el cliente actual trata ese borrado como mejor esfuerzo.
+
+Ejecutar `./scripts/test-storage-rules.ps1` para validar Storage con Auth (19099) y Storage (19199) locales, proyecto ficticio `demo-share-you-storage-rules`. Las pruebas no publican reglas ni acceden al bucket real. Las URL de descarga con token que guarda la app se pueden compartir; quien tenga esa URL podrá acceder a la imagen.
 
 Las cuentas de la versión anterior eran simuladas y no existen automáticamente en Firebase. Hay que registrarse desde la aplicación. El registro público permite Participante u Organizador. Para probar moderación, el responsable del proyecto puede asignar `role: "ADMINISTRATOR"` al documento `users/{uid}` de una cuenta ya registrada desde la consola. El formulario de registro y editar perfil no permiten elevar el rol.
 
@@ -58,7 +66,7 @@ Los votos, favoritos y seguimientos usan identificadores deterministas y transac
 
 ## Compilar y comprobar
 
-Abrir en Android Studio, sincronizar Gradle y ejecutar `app`. Se mantienen SDK/Gradle del proyecto. El criterio JVM solicita JDK 25; `JAVA_HOME` debe apuntar a un **JDK completo**, con `jlink`. Usar el mismo JDK para Gradle en Android Studio.
+Abrir en Android Studio, sincronizar Gradle y ejecutar `app`. Se mantienen SDK/Gradle del proyecto. El criterio JVM solicita **Microsoft OpenJDK 25** (`toolchainVendor=MICROSOFT`); `JAVA_HOME` debe apuntar a un **JDK completo**, con `jlink`. Usar el mismo JDK para Gradle en Android Studio. El proveedor se fija en `gradle/gradle-daemon-jvm.properties` porque esos criterios tienen prioridad sobre el JDK seleccionado en el IDE y evitan reutilizar el Java incompleto de una extensión.
 
 ```powershell
 .\gradlew.bat :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest --no-daemon

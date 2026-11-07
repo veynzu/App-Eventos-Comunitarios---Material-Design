@@ -1,0 +1,36 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validFolder(folder) {
+      return folder in ['profiles', 'events'];
+    }
+
+    function ownsFolder(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    match /{folder}/{uid}/{fileName} {
+      // Permite consultar fotos de perfiles y eventos desde la app.
+      allow get: if validFolder(folder) && signedIn();
+
+      // FirebaseMediaRepository genera un UUID nuevo para cada imagen.
+      allow create: if validFolder(folder)
+        && ownsFolder(uid)
+        && resource == null
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*')
+        && 'ownerId' in request.resource.metadata
+        && request.resource.metadata.ownerId == uid;
+
+      // Separar delete evita validar tamaño o tipo de un archivo inexistente.
+      allow delete: if validFolder(folder) && ownsFolder(uid);
+    }
+
+    // Listados, sobrescrituras y otras rutas quedan denegados por defecto.
+  }
+}

@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isModerator() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMINISTRATOR'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'ACTIVE';
+    }
+
+    function validProfile(uid) {
+      let profile = request.resource.data;
+      return profile.keys().hasAll([
+          'id', 'name', 'email', 'role', 'registrationDate',
+          'profilePictureUrl', 'phoneNumber', 'accountStatus', 'pendingEmail'
+        ])
+        && profile.keys().hasOnly([
+          'id', 'name', 'email', 'role', 'registrationDate',
+          'profilePictureUrl', 'phoneNumber', 'accountStatus', 'pendingEmail'
+        ])
+        && profile.id == uid
+        && profile.name is string && profile.name.size() > 0
+        && profile.email is string
+        && profile.email == request.auth.token.email
+        && profile.role in ['PARTICIPANT', 'ORGANIZER', 'ADMINISTRATOR']
+        && profile.accountStatus in ['ACTIVE', 'SUSPENDED']
+        && profile.registrationDate is timestamp
+        && (profile.profilePictureUrl == null || profile.profilePictureUrl is string)
+        && (profile.phoneNumber == null || profile.phoneNumber is string)
+        && (profile.pendingEmail == null || profile.pendingEmail is string);
+    }
+
+    match /users/{uid} {
+      // La app actual escucha TODOS los perfiles. Esto incluye correo y teléfono.
+      // Restringir esa lectura exige cambiar la consulta o separar datos privados.
+      allow read: if signedIn();
+
+      allow create: if isSelf(uid)
+        && validProfile(uid)
+        && request.resource.data.role in ['PARTICIPANT', 'ORGANIZER']
+        && request.resource.data.accountStatus == 'ACTIVE'
+        && request.resource.data.pendingEmail == null;
+
+      allow update: if (
+          isSelf(uid)
+          && resource.data.accountStatus == 'ACTIVE'
+          && validProfile(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name', 'email', 'phoneNumber', 'profilePictureUrl', 'pendingEmail'
+          ])
+        ) || (
+          isModerator()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['accountStatus'])
+          && request.resource.data.accountStatus in ['ACTIVE', 'SUSPENDED']
+        );
+
+      allow delete: if isSelf(uid);
+    }
+
+    // Acceso de lectura para los listeners actuales. No autoriza escrituras.
+    match /{collection}/{documentId} {
+      allow read: if signedIn()
+        && collection in ['events', 'comments', 'votes', 'favorites', 'following'];
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // Las demás rutas y escrituras permanecen denegadas por defecto.
+    // Eventos, inscripciones, contadores e interacciones necesitan reglas propias.
+  }
+}
