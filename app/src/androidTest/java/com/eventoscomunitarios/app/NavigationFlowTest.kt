@@ -13,23 +13,37 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.Espresso.pressBack
-import androidx.test.espresso.Espresso.pressBackUnconditionally
+import androidx.lifecycle.Lifecycle
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertFalse
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.eventoscomunitarios.app.features.auth.FakeUsers
+import com.eventoscomunitarios.app.core.data.InMemoryUserRepository
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import dagger.hilt.android.testing.HiltAndroidTest
+import dagger.hilt.android.testing.HiltAndroidRule
 
 @RunWith(AndroidJUnit4::class)
+@HiltAndroidTest
 class NavigationFlowTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule(order = 0) val hilt = HiltAndroidRule(this)
+    private val users = InMemoryUserRepository().users.value
+    private fun password(userId: String) = when(userId) {
+        "participant-ana" -> "12345678"
+        "administrator-laura" -> "Admin1234"
+        else -> "Organizador123"
+    }
+
+    @get:Rule(order = 1) val compose = createAndroidComposeRule<MainActivity>()
 
     @Test
     fun loginProfileRotationAndLogoutClearProtectedBackStack() {
         openLogin()
-        val user = FakeUsers.users.first()
+        val user = users.first()
         compose.onAllNodes(hasSetTextAction())[0].performTextInput(user.email)
-        compose.onAllNodes(hasSetTextAction())[1].performTextInput(FakeUsers.passwords.getValue(user.id))
+        compose.onAllNodes(hasSetTextAction())[1].performTextInput(password(user.id))
         compose.onAllNodes(hasSetTextAction())[1].performImeAction()
         compose.onNodeWithText("Iniciar sesión").performScrollTo().assertIsEnabled().performClick()
         waitForScreen("Hola, ${user.name}")
@@ -39,14 +53,20 @@ class NavigationFlowTest {
         compose.activityRule.scenario.recreate()
         waitForScreen("Mi perfil")
         compose.onNodeWithText(user.email).assertIsDisplayed()
-        compose.onNodeWithText("Cerrar sesión").performClick()
+        compose.onNodeWithText("Cerrar sesión").performScrollTo().performClick()
         waitForScreen("Bienvenido de vuelta")
         compose.onNodeWithText("Hola, ${user.name}").assertDoesNotExist()
         compose.onNodeWithText("Mi perfil").assertDoesNotExist()
         compose.onAllNodes(hasSetTextAction())[0].assertIsDisplayed()
-        pressBackUnconditionally()
-        compose.onNodeWithText("Hola, ${user.name}").assertDoesNotExist()
-        compose.onNodeWithText("Mi perfil").assertDoesNotExist()
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        // Android 12+ envía la actividad raíz al fondo; versiones anteriores pueden destruirla.
+        val deadline = SystemClock.elapsedRealtime() + 5_000
+        while (compose.activityRule.scenario.state.isAtLeast(Lifecycle.State.STARTED) &&
+            SystemClock.elapsedRealtime() < deadline) {
+            SystemClock.sleep(50)
+        }
+        assertFalse(compose.activityRule.scenario.state.isAtLeast(Lifecycle.State.STARTED))
     }
 
     @Test
@@ -70,10 +90,10 @@ class NavigationFlowTest {
     }
 
     @Test
-    fun participantSeesOnlyEnrolledEventsAndCannotManageCreatedEvents() {
-        val participant = FakeUsers.users.first { it.id == "participant-ana" }
+    fun participantSeesOnlyOwnEnrollmentsAndCanPublish() {
+        val participant = users.first { it.id == "participant-ana" }
         loginAs(participant.id)
-        compose.onNodeWithTag("create_event_button").assertDoesNotExist()
+        compose.onNodeWithTag("create_event_button").assertIsDisplayed()
 
         compose.onNodeWithText("Mis eventos").performClick()
         waitForScreen("Mis eventos")
@@ -82,7 +102,7 @@ class NavigationFlowTest {
 
         compose.onNodeWithText("Creados").performClick()
         compose.onNodeWithText("Aún no has creado ningún evento.").assertIsDisplayed()
-        compose.onNodeWithText("Administrar").assertDoesNotExist()
+        compose.onNodeWithText("Editar").assertDoesNotExist()
     }
 
     @Test
@@ -98,7 +118,7 @@ class NavigationFlowTest {
         waitForScreen("Mis eventos")
         compose.onNodeWithText("No estás inscrito en ningún evento.").assertIsDisplayed()
         compose.onNodeWithText("Creados").performClick()
-        compose.onAllNodesWithText("Administrar")[0].assertIsDisplayed().performClick()
+        compose.onAllNodesWithText("Editar")[0].assertIsDisplayed().performClick()
         waitForScreen("Editar evento")
         compose.onNodeWithText("Torneo de microfútbol").assertIsDisplayed()
     }
@@ -116,12 +136,12 @@ class NavigationFlowTest {
 
         compose.onNodeWithText("Perfil").performClick()
         waitForScreen("Mi perfil")
-        compose.onNodeWithText("Cerrar sesión").performClick()
+        compose.onNodeWithText("Cerrar sesión").performScrollTo().performClick()
         waitForScreen("Bienvenido de vuelta")
 
-        val admin = FakeUsers.users.first { it.id == "administrator-laura" }
+        val admin = users.first { it.id == "administrator-laura" }
         compose.onAllNodes(hasSetTextAction())[0].performTextInput(admin.email)
-        compose.onAllNodes(hasSetTextAction())[1].performTextInput(FakeUsers.passwords.getValue(admin.id))
+        compose.onAllNodes(hasSetTextAction())[1].performTextInput(password(admin.id))
         compose.onNodeWithText("Iniciar sesión").performScrollTo().assertIsEnabled().performClick()
         waitForScreen("Panel de control")
         compose.onNodeWithTag("admin_nav_moderation").performClick()
@@ -141,9 +161,9 @@ class NavigationFlowTest {
 
     private fun loginAs(userId: String) {
         openLogin()
-        val user = FakeUsers.users.first { it.id == userId }
+        val user = users.first { it.id == userId }
         compose.onAllNodes(hasSetTextAction())[0].performTextInput(user.email)
-        compose.onAllNodes(hasSetTextAction())[1].performTextInput(FakeUsers.passwords.getValue(user.id))
+        compose.onAllNodes(hasSetTextAction())[1].performTextInput(password(user.id))
         compose.onAllNodes(hasSetTextAction())[1].performImeAction()
         compose.onNodeWithText("Iniciar sesión").performScrollTo().assertIsEnabled().performClick()
         waitForScreen("Hola, ${user.name}")
@@ -154,6 +174,6 @@ class NavigationFlowTest {
             compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() &&
                 compose.onAllNodesWithTag("loading_indicator").fetchSemanticsNodes().isEmpty()
         }
-        compose.onNodeWithText(text).assertIsDisplayed()
+        compose.onAllNodesWithText(text)[0].assertIsDisplayed()
     }
 }

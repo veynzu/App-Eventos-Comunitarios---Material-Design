@@ -60,7 +60,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.domain.model.User
@@ -73,7 +73,7 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 
 @Composable
 fun LoginScreen(
-    viewModel: LoginViewModel = viewModel(),
+    viewModel: LoginViewModel = hiltViewModel(),
     onIniciarSesion: (User) -> Unit,
     onRecuperarContrasena: () -> Unit = {},
     onCrearCuenta: () -> Unit = {}

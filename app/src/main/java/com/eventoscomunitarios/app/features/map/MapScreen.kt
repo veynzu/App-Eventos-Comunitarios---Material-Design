@@ -51,10 +51,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.core.components.EventMap
-import com.eventoscomunitarios.app.core.data.FakeEvents
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
@@ -64,7 +63,7 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 
 @Composable
 fun MapScreen(
-    viewModel: MapViewModel = viewModel(),
+    viewModel: MapViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {},
     onHomeClick: () -> Unit = {},
     onMyEventsClick: () -> Unit = {},
@@ -136,7 +135,7 @@ private fun MapContent(
                     shape = RoundedCornerShape(28.dp),
                     leadingIcon = { Icon(Icons.Default.LocationOn, null) }
                 )
-                IconButton(onClick = {}) { Icon(Icons.Default.Tune, "Filtros") }
+                IconButton(onClick = onRadiusClick) { Icon(Icons.Default.Tune, "Cambiar radio") }
             }
 
             Row(
@@ -222,7 +221,7 @@ private fun MapEventCard(event: Event, selected: Boolean, onSelect: () -> Unit, 
 private fun MapScreenPreview() {
     AppeventoscomunitariosTheme(darkTheme = false, dynamicColor = false) {
         MapContent(
-            state = MapUiState(userId = "participant-ana", events = FakeEvents.events, loadResult = RequestResult.Success),
+            state = MapUiState(userId = "participant-ana", events = emptyList(), loadResult = RequestResult.Success),
             onAddressChange = {}, onRadiusClick = {}, onFilterClick = {}, onEventSelected = {},
             onCenterClick = {}, onNavigateBack = {}, onHomeClick = {}, onMyEventsClick = {},
             onProfileClick = {}, onEventClick = {}

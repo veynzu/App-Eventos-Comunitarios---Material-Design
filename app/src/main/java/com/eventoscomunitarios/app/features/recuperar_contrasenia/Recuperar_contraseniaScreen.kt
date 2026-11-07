@@ -56,7 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.AzulClaro
 import com.eventoscomunitarios.app.ui.theme.Fondo
@@ -66,7 +66,7 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 
 @Composable
 fun RecuperarContrasenaScreen(
-    viewModel: RecuperarContrasenaViewModel = viewModel(),
+    viewModel: RecuperarContrasenaViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -75,7 +75,7 @@ fun RecuperarContrasenaScreen(
     LaunchedEffect(state.solicitudValidada) {
         if (state.solicitudValidada) {
             snackbarHostState.showSnackbar(
-                "Correo válido. La solicitud está lista para conectar con el servicio de recuperación."
+                "Si existe una cuenta con ese correo, recibirás un enlace para restablecer la contraseña."
             )
             viewModel.clearSolicitudValidada()
         }
@@ -218,6 +218,7 @@ private fun RecuperarContrasenaContent(
 
                 Button(
                     onClick = onEnviarInstrucciones,
+                    enabled = !state.isLoading,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(49.dp),
@@ -228,7 +229,7 @@ private fun RecuperarContrasenaContent(
                     )
                 ) {
                     Text(
-                        text = "Enviar instrucciones",
+                        text = if (state.isLoading) "Enviando…" else "Enviar instrucciones",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold
                     )

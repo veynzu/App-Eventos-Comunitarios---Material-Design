@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.eventoscomunitarios.app.R
@@ -69,6 +70,11 @@ fun EventMap(
 ) {
     if (LocalInspectionMode.current) {
         EventMapPreviewPlaceholder(modifier)
+        return
+    }
+
+    if (stringResource(R.string.mapbox_access_token).isBlank()) {
+        EventMapConfigurationError(modifier)
         return
     }
 
@@ -168,5 +174,23 @@ private fun EventMapPreviewPlaceholder(modifier: Modifier) {
         contentAlignment = Alignment.Center
     ) {
         Text("Mapa de eventos · Armenia", color = Color(0xFF2B638B))
+    }
+}
+
+@Composable
+private fun EventMapConfigurationError(modifier: Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(286.dp)
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(24.dp)
+            .testTag("event_map"),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "Falta configurar MAPBOX_ACCESS_TOKEN en local.properties.",
+            color = MaterialTheme.colorScheme.onErrorContainer
+        )
     }
 }

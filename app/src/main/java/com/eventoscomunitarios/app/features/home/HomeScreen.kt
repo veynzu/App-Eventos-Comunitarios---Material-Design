@@ -15,11 +15,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.CardDefaults
@@ -54,13 +58,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventCategory
 import com.eventoscomunitarios.app.core.util.RequestResult
+import com.eventoscomunitarios.app.core.components.RemoteImage
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.domain.model.UserRole
-import com.eventoscomunitarios.app.features.auth.FakeUsers
+import com.eventoscomunitarios.app.domain.model.User
+import java.util.Date
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.AzulClaro
 import com.eventoscomunitarios.app.ui.theme.Fondo
@@ -71,12 +77,14 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 @Composable
 fun HomeScreen(
     userId: String,
-    viewModel: HomeViewModel = viewModel(),
+    viewModel: HomeViewModel = hiltViewModel(),
     onAbrirMapa: () -> Unit = {},
     onAbrirMisEventos: () -> Unit = {},
     onAbrirPerfil: () -> Unit = {},
     onCrearEvento: () -> Unit = {},
     onEventClick: (Int) -> Unit = {},
+    onAbrirNotificaciones: () -> Unit = {},
+    onVolverModeracion: () -> Unit = {},
     onSessionInvalid: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -87,6 +95,10 @@ fun HomeScreen(
         state = state,
         onSearchRadiusChange = viewModel::onSearchRadiusChange,
         onFilterChange = viewModel::onFilterChange,
+        onCategoryChange = viewModel::onCategoryChange,
+        onQueryChange = viewModel::onQueryChange,
+        onAbrirNotificaciones = onAbrirNotificaciones,
+        onVolverModeracion = onVolverModeracion,
         onFavoriteClick = viewModel::onFavoriteClick,
         onAbrirMapa = onAbrirMapa,
         onAbrirMisEventos = onAbrirMisEventos,
@@ -103,6 +115,10 @@ private fun HomeScreenContent(
     state: HomeUiState,
     onSearchRadiusChange: (Float) -> Unit,
     onFilterChange: (HomeFilter) -> Unit,
+    onCategoryChange: (EventCategory?) -> Unit,
+    onQueryChange: (String) -> Unit,
+    onAbrirNotificaciones: () -> Unit,
+    onVolverModeracion: () -> Unit,
     onFavoriteClick: (Int) -> Unit,
     onAbrirMapa: () -> Unit,
     onAbrirMisEventos: () -> Unit,
@@ -150,7 +166,7 @@ private fun HomeScreenContent(
             )
         },
         floatingActionButton = {
-            if (state.user?.role == UserRole.ORGANIZER) {
+            if (state.canCreateEvent) {
                 ExtendedFloatingActionButton(
                     onClick = onCrearEvento,
                     modifier = Modifier.testTag("create_event_button"),
@@ -182,6 +198,10 @@ private fun HomeScreenContent(
                 userInitials = state.userInitials,
                 onSearchRadiusChange = onSearchRadiusChange,
                 onFilterChange = onFilterChange,
+                onCategoryChange = onCategoryChange,
+                onQueryChange = onQueryChange,
+                onAbrirNotificaciones = onAbrirNotificaciones,
+                onVolverModeracion = onVolverModeracion,
                 onFavoriteClick = onFavoriteClick,
                 onAbrirMapa = onAbrirMapa,
                 onAbrirPerfil = onAbrirPerfil,
@@ -198,6 +218,10 @@ private fun HomeContent(
     userInitials: String,
     onSearchRadiusChange: (Float) -> Unit,
     onFilterChange: (HomeFilter) -> Unit,
+    onCategoryChange: (EventCategory?) -> Unit,
+    onQueryChange: (String) -> Unit,
+    onAbrirNotificaciones: () -> Unit,
+    onVolverModeracion: () -> Unit,
     onFavoriteClick: (Int) -> Unit,
     onAbrirMapa: () -> Unit,
     onAbrirPerfil: () -> Unit,
@@ -212,6 +236,7 @@ private fun HomeContent(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .testTag("home_feed")
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -239,10 +264,12 @@ private fun HomeContent(
                     }
 
                     IconButton(
-                        onClick = {},
-                        modifier = Modifier.size(36.dp)
+                        onClick = onAbrirNotificaciones,
+                        modifier = Modifier.size(48.dp).testTag("home_notifications")
                     ) {
-                        IconoNotificaciones()
+                        BadgedBox(badge = {
+                            if (state.unreadNotifications > 0) Badge { Text(state.unreadNotifications.toString()) }
+                        }) { IconoNotificaciones() }
                     }
 
                     Spacer(modifier = Modifier.width(6.dp))
@@ -351,13 +378,36 @@ private fun HomeContent(
                 }
             }
 
+            state.syncError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
+            if (state.user?.role == UserRole.ADMINISTRATOR) {
+                item { TextButton(onClick = onVolverModeracion) { Text("Volver a moderación") } }
+            }
+            item {
+                OutlinedTextField(
+                    value = state.query, onValueChange = onQueryChange,
+                    label = { Text("Buscar por título o lugar") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item {
+                        FilterChip(selected = state.selectedCategory == null,
+                            onClick = { onCategoryChange(null) }, label = { Text("Todas las categorías") })
+                    }
+                    items(EventCategory.entries) { category ->
+                        FilterChip(selected = state.selectedCategory == category,
+                            onClick = { onCategoryChange(category) }, label = { Text(category.displayName) })
+                    }
+                }
+            }
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    HomeFilter.values().forEach { filter ->
+                    HomeFilter.entries.forEach { filter ->
                         FilterChip(
                             selected = state.selectedFilter == filter,
                             onClick = {
@@ -445,7 +495,7 @@ private fun EventCard(
     val backgroundIcon = when (event.category) {
         EventCategory.SPORTS -> Color(0xFFD9ECFF)
         EventCategory.CULTURE -> Color(0xFFEEDFFF)
-        EventCategory.COMMUNITY -> Color(0xFFDDEFEA)
+        else -> Color(0xFFDDEFEA)
     }
 
     val azulPrincipal = MaterialTheme.colorScheme.primary
@@ -479,11 +529,8 @@ private fun EventCard(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                EventCategoryIcon(
-                    category = event.category,
-                    modifier = Modifier.size(28.dp),
-                    color = azulPrincipal
-                )
+                if (event.photoUri != null) RemoteImage(event.photoUri, event.title, Modifier.fillMaxSize())
+                else EventCategoryIcon(category = event.category, modifier = Modifier.size(28.dp), color = azulPrincipal)
             }
 
             Spacer(modifier = Modifier.width(9.dp))
@@ -580,7 +627,7 @@ private fun EventCard(
                     Spacer(modifier = Modifier.weight(1f))
 
                     Text(
-                        text = "${event.attendeeCount} van",
+                        text = if (event.isFinished || event.endsAt <= System.currentTimeMillis()) "Finalizado" else "${event.attendeeCount}/${event.capacity} van",
                         fontSize = 8.sp,
                         color = TextoSecundario,
                         maxLines = 1
@@ -896,7 +943,7 @@ private fun EventCategoryIcon(
                 drawLine(color, Offset(size.width * 0.82f, size.height * 0.76f), Offset(size.width * 0.52f, size.height * 0.84f), strokeWidth)
             }
 
-            EventCategory.COMMUNITY -> {
+            else -> {
                 drawRoundRect(
                     color = color,
                     topLeft = Offset(size.width * 0.20f, size.height * 0.25f),
@@ -985,11 +1032,15 @@ private fun HomeScreenPreview() {
     ) {
         HomeScreenContent(
             state = HomeUiState(
-                user = FakeUsers.users.first(),
+                user = User("preview", "Ana María Torres", "ana@correo.com", UserRole.PARTICIPANT, Date()),
                 loadResult = RequestResult.Success
             ),
             onSearchRadiusChange = {},
             onFilterChange = {},
+            onCategoryChange = {},
+            onQueryChange = {},
+            onAbrirNotificaciones = {},
+            onVolverModeracion = {},
             onFavoriteClick = {},
             onAbrirMapa = {},
             onAbrirMisEventos = {},

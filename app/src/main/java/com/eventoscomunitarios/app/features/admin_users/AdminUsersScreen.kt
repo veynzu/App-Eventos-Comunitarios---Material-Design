@@ -49,7 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.eventoscomunitarios.app.core.components.AdminBottomBar
 import com.eventoscomunitarios.app.core.components.AdminDestination
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
@@ -58,7 +58,6 @@ import com.eventoscomunitarios.app.core.util.initials
 import com.eventoscomunitarios.app.domain.model.AccountStatus
 import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.domain.model.UserRole
-import com.eventoscomunitarios.app.features.auth.FakeUsers
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.Fondo
 import com.eventoscomunitarios.app.ui.theme.TextoPrincipal
@@ -66,9 +65,10 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 
 @Composable
 fun AdminUsersScreen(
-    viewModel: AdminUsersViewModel = viewModel(),
+    viewModel: AdminUsersViewModel = hiltViewModel(),
     onDashboardClick: () -> Unit = {},
     onModerationClick: () -> Unit = {},
+    onNotificationsClick: () -> Unit = {},
     onProfileClick: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -80,6 +80,7 @@ fun AdminUsersScreen(
         onFeedbackShown = viewModel::clearFeedback,
         onDashboardClick = onDashboardClick,
         onModerationClick = onModerationClick,
+        onNotificationsClick = onNotificationsClick,
         onProfileClick = onProfileClick
     )
 }
@@ -93,6 +94,7 @@ private fun AdminUsersContent(
     onFeedbackShown: () -> Unit,
     onDashboardClick: () -> Unit,
     onModerationClick: () -> Unit,
+    onNotificationsClick: () -> Unit,
     onProfileClick: () -> Unit
 ) {
     when (val result = state.loadResult) {
@@ -126,8 +128,8 @@ private fun AdminUsersContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Usuarios", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                IconButton(onClick = {}) { Icon(Icons.Default.Notifications, "Notificaciones") }
-                IconButton(onClick = {}) { Icon(Icons.Default.FilterList, "Filtros") }
+                IconButton(onClick = onNotificationsClick) { Icon(Icons.Default.Notifications, "Notificaciones") }
+                IconButton(onClick = { onFilterSelected(UserFilter.entries[(state.selectedFilter.ordinal + 1) % UserFilter.entries.size]) }) { Icon(Icons.Default.FilterList, "Cambiar filtro de usuarios") }
             }
             OutlinedTextField(
                 value = state.query,
@@ -160,7 +162,7 @@ private fun AdminUsersContent(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(state.visibleUsers, key = User::id) { user ->
-                    UserCard(user = user, onToggleStatus = { onToggleStatus(user.id) })
+                    UserCard(user = user, enabled = !state.isSaving, onToggleStatus = { onToggleStatus(user.id) })
                 }
             }
         }
@@ -168,7 +170,7 @@ private fun AdminUsersContent(
 }
 
 @Composable
-private fun UserCard(user: User, onToggleStatus: () -> Unit) {
+private fun UserCard(user: User, enabled: Boolean = true, onToggleStatus: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -192,7 +194,7 @@ private fun UserCard(user: User, onToggleStatus: () -> Unit) {
                 }
             }
             Box {
-                IconButton(onClick = { expanded = true }) { Icon(Icons.Default.MoreVert, "Opciones de ${user.name}") }
+                IconButton(onClick = { expanded = true }, enabled = enabled) { Icon(Icons.Default.MoreVert, "Opciones de ${user.name}") }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     DropdownMenuItem(
                         text = { Text(if (user.accountStatus == AccountStatus.ACTIVE) "Suspender" else "Reactivar") },
@@ -215,9 +217,9 @@ private fun roleLabel(role: UserRole): String = when (role) {
 private fun AdminUsersPreview() {
     AppeventoscomunitariosTheme(darkTheme = false, dynamicColor = false) {
         AdminUsersContent(
-            state = AdminUsersUiState(loadResult = RequestResult.Success, users = FakeUsers.users),
+            state = AdminUsersUiState(loadResult = RequestResult.Success, users = emptyList()),
             onQueryChange = {}, onFilterSelected = {}, onToggleStatus = {}, onFeedbackShown = {},
-            onDashboardClick = {}, onModerationClick = {}, onProfileClick = {}
+            onDashboardClick = {}, onModerationClick = {}, onNotificationsClick = {}, onProfileClick = {}
         )
     }
 }

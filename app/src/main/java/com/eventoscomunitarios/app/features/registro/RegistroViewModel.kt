@@ -2,7 +2,10 @@ package com.eventoscomunitarios.app.features.registro
 
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
-import com.eventoscomunitarios.app.features.auth.FakeUsers
+import androidx.lifecycle.viewModelScope
+import com.eventoscomunitarios.app.domain.usecase.UserUseCases
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.domain.model.UserRole
@@ -10,8 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import java.util.Date
-import java.util.UUID
+import kotlinx.coroutines.launch
 
 data class RegistroUiState(
     val nombre: String = "",
@@ -21,15 +23,11 @@ data class RegistroUiState(
     val confirmPassword: String = "",
     val isOrganizer: Boolean = false,
     val terminos: Boolean = false,
-    val currentStep: Int = 1,
-    val documentFrontUri: String? = null,
-    val documentBackUri: String? = null,
     val nombreError: String? = null,
     val emailError: String? = null,
     val telefonoError: String? = null,
     val passwordError: String? = null,
     val confirmPasswordError: String? = null,
-    val documentError: String? = null,
     val terminosError: String? = null,
     val registroResult: RequestResult? = null,
     val registeredUser: User? = null
@@ -46,12 +44,10 @@ data class RegistroUiState(
                 telefonoError == null &&
                 passwordError == null &&
                 confirmPasswordError == null
-
-    val documentsAreSelected: Boolean
-        get() = documentFrontUri != null && documentBackUri != null
 }
 
-class RegistroViewModel : ViewModel() {
+@HiltViewModel
+class RegistroViewModel @Inject constructor(private val users: UserUseCases) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RegistroUiState())
     val uiState: StateFlow<RegistroUiState> = _uiState.asStateFlow()
@@ -109,15 +105,7 @@ class RegistroViewModel : ViewModel() {
     }
 
     fun onAccountTypeChange(isOrganizer: Boolean) {
-        _uiState.update { state ->
-            state.copy(
-                isOrganizer = isOrganizer,
-                currentStep = 1,
-                documentFrontUri = null,
-                documentBackUri = null,
-                documentError = null
-            )
-        }
+        _uiState.update { it.copy(isOrganizer = isOrganizer) }
     }
 
     fun onTerminosChange(terminos: Boolean) {
@@ -126,45 +114,11 @@ class RegistroViewModel : ViewModel() {
         }
     }
 
-    fun onDocumentFrontSelected(uri: String?) {
-        _uiState.update { state ->
-            state.copy(
-                documentFrontUri = uri,
-                documentError = null
-            )
-        }
-    }
-
-    fun onDocumentBackSelected(uri: String?) {
-        _uiState.update { state ->
-            state.copy(
-                documentBackUri = uri,
-                documentError = null
-            )
-        }
-    }
-
-    fun onBackFromDocuments() {
-        _uiState.update { state ->
-            state.copy(
-                currentStep = 1,
-                documentError = null
-            )
-        }
-    }
-
     fun onContinuarClick() {
         if (_uiState.value.registroResult == RequestResult.Loading) return
         validateForm()
         val currentState = _uiState.value
         if (!currentState.isFormValid) return
-
-        if (currentState.isOrganizer && currentState.currentStep == 1) {
-            _uiState.update { state ->
-                state.copy(currentStep = 2)
-            }
-            return
-        }
 
         registrar()
     }
@@ -176,48 +130,27 @@ class RegistroViewModel : ViewModel() {
 
         if (!currentState.isFormValid) return
 
-        if (currentState.isOrganizer && !currentState.documentsAreSelected) {
-            _uiState.update { state ->
-                state.copy(
-                    documentError = "Selecciona el frente y el reverso de tu documento."
-                )
-            }
-            return
-        }
-
         _uiState.update { it.copy(registroResult = RequestResult.Loading, registeredUser = null) }
-        val email = currentState.email.trim()
-        if (FakeUsers.users.any { it.email.equals(email, ignoreCase = true) }) {
-            val message = "Ya existe una cuenta con ese correo electrónico."
-            _uiState.update {
-                it.copy(emailError = message, registroResult = RequestResult.Failure(message))
-            }
-            return
-        }
-
-        val user = User(
-            id = UUID.randomUUID().toString(),
-            name = currentState.nombre.trim(),
-            email = email,
-            phoneNumber = currentState.telefono.trim(),
-            role = if (currentState.isOrganizer) {
-                UserRole.ORGANIZER
-            } else {
-                UserRole.PARTICIPANT
-            },
-            registrationDate = Date(),
-            profilePictureUrl = null
+        viewModelScope.launch {
+        val result = users.register(
+            name = currentState.nombre,
+            email = currentState.email,
+            password = currentState.password,
+            phoneNumber = currentState.telefono,
+            role = if (currentState.isOrganizer) UserRole.ORGANIZER else UserRole.PARTICIPANT
         )
-
-        // Datos temporales compartidos; todavía no se utiliza una base de datos.
-        FakeUsers.users.add(user)
-        FakeUsers.passwords[user.id] = currentState.password
-
         _uiState.update { state ->
             state.copy(
-                registroResult = RequestResult.Success,
-                registeredUser = user
+                registroResult = result.fold(
+                    onSuccess = { RequestResult.Success },
+                    onFailure = { RequestResult.Failure(it.message ?: "No se pudo crear la cuenta") }
+                ),
+                registeredUser = result.getOrNull(),
+                emailError = if (result.isFailure && users.users.value.any {
+                    it.email.equals(currentState.email.trim(), ignoreCase = true)
+                }) "Ya existe una cuenta con ese correo electrónico." else state.emailError
             )
+        }
         }
     }
 

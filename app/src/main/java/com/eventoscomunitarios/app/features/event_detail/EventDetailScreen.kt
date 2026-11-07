@@ -1,7 +1,6 @@
-package com.eventoscomunitarios.app.features.event_detail
+﻿package com.eventoscomunitarios.app.features.event_detail
 
 import android.content.Intent
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,282 +10,315 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
+import coil3.compose.AsyncImage
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
-import com.eventoscomunitarios.app.core.data.FakeEvents
 import com.eventoscomunitarios.app.core.util.initials
 import com.eventoscomunitarios.app.domain.model.EventCategory
+import com.eventoscomunitarios.app.domain.model.EventModerationStatus
 import com.eventoscomunitarios.app.domain.model.EventRegistrationStatus
-import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.TextoPrincipal
 import com.eventoscomunitarios.app.ui.theme.TextoSecundario
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventDetailScreen(
-    viewModel: EventDetailViewModel = viewModel(),
+    viewModel: EventDetailViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onConfirm: (Int) -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-
-    EventDetailContent(
-        state = state,
-        onNavigateBack = onNavigateBack,
-        onConfirm = { eventId ->
-            if (viewModel.confirmAttendance()) onConfirm(eventId)
-        },
-        onToggleFavorite = viewModel::toggleFavorite,
-        onToggleFollow = viewModel::toggleFollow,
-        onShareClick = {
-            state.event?.let { event ->
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(
-                        Intent.EXTRA_TEXT,
-                        "${event.title}\n${event.dateLabel}, ${event.timeLabel}\n${event.location}"
-                    )
-                }
-                context.startActivity(Intent.createChooser(shareIntent, "Compartir evento"))
-            }
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(state.attendanceConfirmedEventId) {
+        state.attendanceConfirmedEventId?.let { eventId ->
+            viewModel.clearAttendanceNavigation()
+            onConfirm(eventId)
         }
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun EventDetailContent(
-    state: EventDetailUiState,
-    onNavigateBack: () -> Unit,
-    onConfirm: (Int) -> Unit,
-    onToggleFavorite: () -> Unit,
-    onToggleFollow: () -> Unit,
-    onShareClick: () -> Unit
-) {
-    if (state.isLoading) {
-        LoadingIndicator()
-        return
     }
-
+    LaunchedEffect(state.message) {
+        state.message?.let {
+            snackbar.showSnackbar(it)
+            viewModel.clearMessage()
+        }
+    }
     val event = state.event
-    if (event == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = state.error ?: "Ocurrió un error", color = TextoPrincipal)
-        }
-        return
-    }
-
-    val headerBackground = when (event.category) {
+    val headerBackground = when (event?.category) {
         EventCategory.SPORTS -> Color(0xFFD9ECFF)
         EventCategory.CULTURE -> Color(0xFFEEDFFF)
-        EventCategory.COMMUNITY -> Color(0xFFDDEFEA)
+        else -> Color(0xFFDDEFEA)
     }
-    val registrationText = when (state.registrationStatus) {
-        EventRegistrationStatus.CONFIRMED -> "Asistencia confirmada"
-        EventRegistrationStatus.WAITLIST -> "En lista de espera"
-        null -> "Confirmar asistencia"
-    }
-
     Scaffold(
+        modifier = Modifier.imePadding(),
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = {},
+                title = { Text("Detalle del evento") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
                     }
                 },
                 actions = {
-                    IconButton(onClick = onShareClick) {
-                        Icon(Icons.Default.Share, contentDescription = "Compartir")
-                    }
-                    IconButton(onClick = onToggleFavorite) {
-                        Icon(
-                            imageVector = if (state.isFavorite) Icons.Filled.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorito",
-                            tint = if (state.isFavorite) Color(0xFFD94D68) else TextoPrincipal
-                        )
+                    if (event != null) {
+                        IconButton(onClick = {
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT,
+                                    "${event.title}\nInicio: ${formatDateTime(event.startsAt)}\nFin: ${formatDateTime(event.endsAt)}\n${event.location}")
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Compartir evento"))
+                        }) { Icon(Icons.Default.Share, contentDescription = "Compartir") }
+                        IconButton(onClick = viewModel::toggleFavorite, enabled = state.canFavorite && !state.isSaving) {
+                            Icon(
+                                if (state.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                contentDescription = if (state.isFavorite) "Quitar de favoritos" else "Agregar a favoritos",
+                                tint = if (state.isFavorite) Color(0xFFD94D68) else TextoPrincipal
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = headerBackground)
             )
         },
         bottomBar = {
-            if (state.canRegister) Surface(color = Color.White, shadowElevation = 8.dp) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("Entrada", fontSize = 12.sp, color = TextoSecundario)
-                        Text(
-                            text = if (event.isFree) "Gratis" else "\$${event.price}",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextoPrincipal
-                        )
-                    }
-                    Button(
-                        onClick = { onConfirm(event.id) },
-                        enabled = state.registrationStatus == null,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B5B7E)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(registrationText, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+            if (event != null && (state.canRegister || state.registrationStatus != null)) {
+                Surface(shadowElevation = 8.dp) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(if (event.isFree) "Entrada gratis" else "Entrada: \$${event.price}", fontWeight = FontWeight.SemiBold)
+                            Text("${event.attendeeCount}/${event.capacity} cupos", color = TextoSecundario)
+                        }
+                        if (state.registrationStatus == null) {
+                            Button(
+                                onClick = viewModel::confirmAttendance,
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = state.canRegister && !state.isSaving,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B5B7E))
+                            ) {
+                                Text(if (event.attendeeCount >= event.capacity) "Unirme a la lista de espera" else "Confirmar asistencia")
+                            }
+                        } else {
+                            Text(
+                                if (state.registrationStatus == EventRegistrationStatus.CONFIRMED) "Asistencia confirmada"
+                                else "Lista de espera · posición ${state.waitlistPosition ?: "—"}",
+                                fontWeight = FontWeight.Medium
+                            )
+                            if (state.canCancelRegistration) {
+                                OutlinedButton(onClick = viewModel::cancelAttendance, enabled = !state.isSaving, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Cancelar inscripción")
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(headerBackground)
-                .padding(top = paddingValues.calculateTopPadding(), bottom = paddingValues.calculateBottomPadding())
-        ) {
-            Spacer(modifier = Modifier.height(24.dp))
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                color = Color.White
+    ) { padding ->
+        when {
+            state.isLoading -> LoadingIndicator()
+            event == null -> Box(Modifier.fillMaxSize().padding(padding).padding(24.dp), contentAlignment = Alignment.Center) {
+                Text(state.error ?: "Evento no disponible")
+            }
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TagBadge(text = event.category.displayName, color = Color(0xFFE4F0FF))
-                        if (event.isFree) TagBadge(text = "Gratis", color = Color(0xFFDDF4D6))
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(event.title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    InfoRow(title = event.dateLabel, subtitle = event.timeLabel)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    InfoRow(title = event.location, subtitle = "A ${formatDistance(event.distanceKm)} km de ti")
-                    Spacer(modifier = Modifier.height(16.dp))
-                    InfoRow(
-                        title = "${event.attendeeCount} asistentes confirmados",
-                        subtitle = "Cupo máximo ${event.capacity} personas"
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    HorizontalDivider(color = Color(0xFFE0E6EB))
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text("Organiza", fontSize = 14.sp, color = TextoPrincipal, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier.size(40.dp).background(Color(0xFFEEDFFF), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(event.organizerName.initials(), color = Color(0xFF6941A5), fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            event.organizerName,
-                            modifier = Modifier.weight(1f),
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp
-                        )
-                        Button(
-                            onClick = onToggleFollow,
-                            colors = if (state.isFollowing) {
-                                ButtonDefaults.buttonColors(containerColor = Color(0xFFF0F4F8), contentColor = TextoPrincipal)
-                            } else {
-                                ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF2B5B7E))
-                            },
-                            border = if (state.isFollowing) null else BorderStroke(1.dp, Color(0xFF2B5B7E))
-                        ) {
-                            Text(if (state.isFollowing) "Siguiendo" else "Seguir", fontSize = 12.sp)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text("Descripción", fontSize = 14.sp, color = TextoPrincipal, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = event.description.ifBlank { "Sin descripción" },
-                        fontSize = 14.sp,
-                        color = TextoSecundario,
-                        lineHeight = 20.sp
-                    )
+                if (state.isSaving) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                state.syncError?.let { message ->
+                    item { Text(message, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 24.dp)) }
                 }
+                event.photoUri?.takeIf { it.isNotBlank() }?.let { photo ->
+                    item {
+                        AsyncImage(model = photo, contentDescription = "Foto de ${event.title}",
+                            modifier = Modifier.fillMaxWidth().height(220.dp), contentScale = ContentScale.Crop)
+                    }
+                }
+                item {
+                    Column(Modifier.fillMaxWidth().background(headerBackground).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(event.category.displayName, style = MaterialTheme.typography.labelLarge)
+                        Text(event.title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = TextoPrincipal)
+                        Text(when {
+                            event.moderationStatus == EventModerationStatus.PENDING -> "Pendiente de moderación"
+                            event.moderationStatus == EventModerationStatus.REJECTED -> "Publicación rechazada"
+                            event.isFinished || event.endsAt <= System.currentTimeMillis() -> "Evento finalizado"
+                            event.startsAt <= System.currentTimeMillis() -> "Evento en curso · inscripciones cerradas"
+                            else -> "Publicación aprobada"
+                        }, fontWeight = FontWeight.SemiBold)
+                        event.rejectionReason?.takeIf { it.isNotBlank() }?.let {
+                            Text("Motivo del rechazo: $it", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+                item {
+                    Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        InfoRow("Inicio", formatDateTime(event.startsAt))
+                        InfoRow("Finalización", formatDateTime(event.endsAt))
+                        InfoRow("Lugar", event.location)
+                        InfoRow("Asistencia", "${event.attendeeCount} confirmados · cupo máximo ${event.capacity}")
+                        Text("${state.waitlistCount} personas en espera", color = TextoSecundario)
+                        Text("Si se libera un cupo antes del inicio, la primera persona en espera recibe la confirmación y una notificación.",
+                            style = MaterialTheme.typography.bodySmall, color = TextoSecundario)
+                        HorizontalDivider()
+                    }
+                }
+                item {
+                    Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Organiza", style = MaterialTheme.typography.titleMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(40.dp).background(Color(0xFFEEDFFF), CircleShape), contentAlignment = Alignment.Center) {
+                                Text(event.organizerName.initials(), color = Color(0xFF6941A5), fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Text(event.organizerName, Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                            if (state.canFollow) {
+                                TextButton(onClick = viewModel::toggleFollow, enabled = !state.isSaving) { Text(if (state.isFollowing) "Siguiendo" else "Seguir") }
+                            }
+                        }
+                        Text("Descripción", style = MaterialTheme.typography.titleMedium)
+                        Text(event.description.ifBlank { "Sin descripción" }, color = TextoSecundario)
+                        HorizontalDivider()
+                    }
+                }
+                item {
+                    Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Valoración de la comunidad", style = MaterialTheme.typography.titleMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            FilterChip(
+                                selected = state.myVote == 1, enabled = state.canVote && !state.isSaving,
+                                onClick = { viewModel.vote(1) },
+                                label = { Text("${state.positiveVotes} positivos") },
+                                leadingIcon = { Icon(Icons.Default.ThumbUp, contentDescription = null, Modifier.size(18.dp)) }
+                            )
+                            FilterChip(
+                                selected = state.myVote == -1, enabled = state.canVote && !state.isSaving,
+                                onClick = { viewModel.vote(-1) },
+                                label = { Text("${state.negativeVotes} negativos") },
+                                leadingIcon = { Icon(Icons.Default.ThumbDown, contentDescription = null, Modifier.size(18.dp)) }
+                            )
+                        }
+                        Text(when {
+                            state.canVote -> "Toca otra vez tu voto para retirarlo. Solo cuenta un voto por persona."
+                            event.moderationStatus != EventModerationStatus.APPROVED -> "La valoración estará disponible cuando se apruebe la publicación."
+                            else -> "Puedes consultar los votos; el autor no puede votar su propia publicación."
+                        },
+                            style = MaterialTheme.typography.bodySmall, color = TextoSecundario)
+                        HorizontalDivider()
+                    }
+                }
+                item {
+                    Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Comentarios (${state.comments.size})", style = MaterialTheme.typography.titleMedium)
+                        if (state.canComment) {
+                            OutlinedTextField(
+                                value = state.commentText, onValueChange = viewModel::onCommentChange,
+                                enabled = !state.isSaving,
+                                modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 5,
+                                label = { Text("Escribe un comentario") },
+                                isError = state.commentError != null,
+                                supportingText = { Text(state.commentError ?: "${state.commentText.length}/1000") }
+                            )
+                            Button(onClick = viewModel::addComment, modifier = Modifier.align(Alignment.End), enabled = state.commentText.isNotBlank() && !state.isSaving) {
+                                Text("Publicar comentario")
+                            }
+                        } else {
+                            Text("Los comentarios estarán disponibles cuando se apruebe la publicación.", color = TextoSecundario)
+                        }
+                        if (state.comments.isEmpty()) Text("Todavía no hay comentarios.", color = TextoSecundario)
+                    }
+                }
+                items(state.comments, key = { it.id }) { comment ->
+                    Card(Modifier.fillMaxWidth().padding(horizontal = 24.dp), shape = RoundedCornerShape(12.dp)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(comment.authorName, fontWeight = FontWeight.SemiBold)
+                                    Text(formatDateTime(comment.createdAt), style = MaterialTheme.typography.bodySmall)
+                                }
+                                if (comment.userId == state.currentUserId || state.isModerator) {
+                                    IconButton(onClick = { viewModel.requestDeleteComment(comment.id) }, enabled = !state.isSaving) {
+                                        Icon(Icons.Default.DeleteOutline, contentDescription = "Eliminar comentario")
+                                    }
+                                }
+                            }
+                            Text(comment.text)
+                        }
+                    }
+                }
+                item { Spacer(Modifier.height(16.dp)) }
             }
         }
     }
-}
-
-@Composable
-private fun TagBadge(text: String, color: Color) {
-    Surface(color = color, shape = RoundedCornerShape(12.dp)) {
-        Text(text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp)
+    if (state.commentToDelete != null) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDeleteComment,
+            title = { Text("Eliminar comentario") }, text = { Text("El comentario se retirará de esta publicación.") },
+            confirmButton = { TextButton(onClick = viewModel::deleteComment, enabled = !state.isSaving) { Text("Eliminar") } },
+            dismissButton = { TextButton(onClick = viewModel::dismissDeleteComment, enabled = !state.isSaving) { Text("Cancelar") } }
+        )
     }
 }
 
 @Composable
 private fun InfoRow(title: String, subtitle: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(40.dp).background(Color(0xFFF0F4F8), RoundedCornerShape(8.dp)))
-        Spacer(modifier = Modifier.width(16.dp))
-        Column {
-            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextoPrincipal)
-            Text(subtitle, fontSize = 12.sp, color = TextoSecundario)
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextoPrincipal)
+        Text(subtitle, fontSize = 14.sp, color = TextoSecundario)
     }
 }
 
-private fun formatDistance(distanceKm: Double): String =
-    if (distanceKm % 1.0 == 0.0) distanceKm.toInt().toString() else distanceKm.toString()
-
-@Preview(showBackground = true, showSystemUi = true, name = "Vista previa - Detalle")
-@Composable
-private fun EventDetailScreenPreview() {
-    AppeventoscomunitariosTheme(darkTheme = false, dynamicColor = false) {
-        EventDetailContent(
-            state = EventDetailUiState(event = FakeEvents.events.first(), isLoading = false),
-            onNavigateBack = {},
-            onConfirm = {},
-            onToggleFavorite = {},
-            onToggleFollow = {},
-            onShareClick = {}
-        )
-    }
-}
+private fun formatDateTime(timestamp: Long): String =
+    SimpleDateFormat("EEE d MMM yyyy, HH:mm", Locale.forLanguageTag("es-CO")).format(Date(timestamp))

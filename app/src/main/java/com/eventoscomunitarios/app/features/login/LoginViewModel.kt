@@ -2,7 +2,10 @@ package com.eventoscomunitarios.app.features.login
 
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
-import com.eventoscomunitarios.app.features.auth.FakeUsers
+import androidx.lifecycle.viewModelScope
+import com.eventoscomunitarios.app.domain.usecase.UserUseCases
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.domain.model.AccountStatus
@@ -10,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 data class LoginUiState(
     val email: String = "",
@@ -27,7 +31,8 @@ data class LoginUiState(
                 passwordError == null
 }
 
-class LoginViewModel : ViewModel() {
+@HiltViewModel
+class LoginViewModel @Inject constructor(private val users: UserUseCases) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
@@ -76,23 +81,17 @@ class LoginViewModel : ViewModel() {
             )
         }
 
-        val authenticatedUser = FakeUsers.users.firstOrNull { user ->
-            user.email.equals(currentState.email.trim(), ignoreCase = true) &&
-                FakeUsers.passwords[user.id] == currentState.password
-        }
-
-        val accountBlocked = authenticatedUser?.accountStatus == AccountStatus.SUSPENDED
-        _uiState.update { state ->
-            state.copy(
-                loginResult = if (accountBlocked) {
-                    RequestResult.Failure("Esta cuenta se encuentra suspendida")
-                } else if (authenticatedUser != null) {
-                    RequestResult.Success
-                } else {
-                    RequestResult.Failure("Correo o contraseña incorrectos")
-                },
-                authenticatedUser = authenticatedUser.takeUnless { accountBlocked }
-            )
+        viewModelScope.launch {
+            val result = users.login(currentState.email, currentState.password)
+            _uiState.update { state ->
+                state.copy(
+                    loginResult = result.fold(
+                        onSuccess = { RequestResult.Success },
+                        onFailure = { RequestResult.Failure(it.message ?: "No se pudo ingresar") }
+                    ),
+                    authenticatedUser = result.getOrNull()
+                )
+            }
         }
     }
 

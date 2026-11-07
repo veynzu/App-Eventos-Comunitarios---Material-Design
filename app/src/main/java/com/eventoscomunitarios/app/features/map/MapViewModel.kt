@@ -3,17 +3,21 @@ package com.eventoscomunitarios.app.features.map
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.eventoscomunitarios.app.core.data.FakeEvents
+import com.eventoscomunitarios.app.domain.usecase.EventUseCases
+import com.eventoscomunitarios.app.domain.usecase.UserUseCases
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import java.util.Calendar
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.AccountStatus
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventModerationStatus
 import com.eventoscomunitarios.app.domain.model.UserRole
-import com.eventoscomunitarios.app.features.auth.FakeUsers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 enum class MapFilter(val label: String) {
@@ -32,14 +36,29 @@ data class MapUiState(
 ) {
     val visibleEvents: List<Event>
         get() = events.filter { event ->
-            event.moderationStatus == EventModerationStatus.APPROVED &&
-                event.distanceKm <= radiusKm &&
-                (MapFilter.TODAY !in activeFilters || event.id == 1) &&
+            event.moderationStatus == EventModerationStatus.APPROVED && !event.isFinished &&
+                event.endsAt > System.currentTimeMillis() && event.distanceKm <= radiusKm &&
+                (MapFilter.TODAY !in activeFilters || isToday(event)) &&
                 (MapFilter.OUTDOOR !in activeFilters || event.location.contains("Parque", true))
         }
+
+    private fun isToday(event: Event): Boolean {
+        val start = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        val end = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
+        return event.startsAt < end.timeInMillis && event.endsAt > start.timeInMillis
+    }
+
 }
 
-class MapViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
+@HiltViewModel
+class MapViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
+    private val eventUseCases: EventUseCases,
+    private val userUseCases: UserUseCases
+) : ViewModel() {
     private val userId: String = savedStateHandle["userId"] ?: ""
     private val _uiState = MutableStateFlow(MapUiState(userId = userId))
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
@@ -47,17 +66,8 @@ class MapViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
     init {
         load()
         viewModelScope.launch {
-            FakeEvents.eventsFlow.collect { events ->
-                _uiState.update { state ->
-                    val visibleIds = events
-                        .filter { it.moderationStatus == EventModerationStatus.APPROVED }
-                        .mapTo(mutableSetOf()) { it.id }
-                    state.copy(
-                        events = events,
-                        selectedEventId = state.selectedEventId?.takeIf { it in visibleIds }
-                    )
-                }
-            }
+            combine(eventUseCases.events, eventUseCases.syncState, userUseCases.users, userUseCases.syncState) { _, _, _, _ -> Unit }
+                .collect { load() }
         }
     }
 
@@ -88,15 +98,23 @@ class MapViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
     }
 
     private fun load() {
-        val user = FakeUsers.users.firstOrNull { it.id == userId }
-        val valid = user != null && user.role != UserRole.ADMINISTRATOR &&
-            user.accountStatus == AccountStatus.ACTIVE
+        val user = userUseCases.findUser(userId)
+        val valid = user != null && user.accountStatus == AccountStatus.ACTIVE
+        val loading = eventUseCases.syncState.value.isLoading || userUseCases.syncState.value.isLoading
+        val error = eventUseCases.syncState.value.error ?: userUseCases.syncState.value.error
         _uiState.update {
             it.copy(
-                events = FakeEvents.events,
-                loadResult = if (valid) RequestResult.Success
-                else RequestResult.Failure("No tienes acceso al mapa de clientes")
+                events = eventUseCases.events.value.map { event ->
+                    userUseCases.findUser(event.organizerId)?.let { author -> event.copy(organizerName = author.name) } ?: event
+                },
+                loadResult = when {
+                    loading -> RequestResult.Loading
+                    error != null -> RequestResult.Failure(error)
+                    valid -> RequestResult.Success
+                    else -> RequestResult.Failure("No tienes acceso al mapa")
+                }
             )
         }
+        _uiState.update { state -> state.copy(selectedEventId = state.selectedEventId?.takeIf { id -> state.visibleEvents.any { it.id == id } }) }
     }
 }

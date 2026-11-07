@@ -12,7 +12,8 @@ data class User(
     val profilePictureUrl: String? = null,
     // Dato adicional que solicita el formulario actual.
     val phoneNumber: String? = null,
-    val accountStatus: AccountStatus = AccountStatus.ACTIVE
+    val accountStatus: AccountStatus = AccountStatus.ACTIVE,
+    val pendingEmail: String? = null
 )
 
 enum class AccountStatus {

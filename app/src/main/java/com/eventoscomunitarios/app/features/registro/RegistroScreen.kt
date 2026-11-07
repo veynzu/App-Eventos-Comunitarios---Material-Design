@@ -1,8 +1,5 @@
 package com.eventoscomunitarios.app.features.registro
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.BackHandler
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,21 +24,18 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -71,7 +65,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
@@ -84,26 +78,12 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 
 @Composable
 fun RegistroScreen(
-    viewModel: RegistroViewModel = viewModel(),
+    viewModel: RegistroViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     onRegistroExitoso: (User) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-
-    BackHandler(enabled = state.currentStep == 2) { viewModel.onBackFromDocuments() }
-
-    val frontDocumentPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        viewModel.onDocumentFrontSelected(uri?.toString())
-    }
-
-    val backDocumentPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        viewModel.onDocumentBackSelected(uri?.toString())
-    }
 
     LaunchedEffect(state.registroResult) {
         when (val result = state.registroResult) {
@@ -133,13 +113,7 @@ fun RegistroScreen(
         Box(modifier = Modifier.padding(innerPadding)) {
             RegistroContent(
                 state = state,
-                onNavigateBack = {
-                    if (state.currentStep == 2) {
-                        viewModel.onBackFromDocuments()
-                    } else {
-                        onNavigateBack()
-                    }
-                },
+                onNavigateBack = onNavigateBack,
                 onNombreChange = viewModel::onNombreChange,
                 onEmailChange = viewModel::onEmailChange,
                 onTelefonoChange = viewModel::onTelefonoChange,
@@ -147,12 +121,6 @@ fun RegistroScreen(
                 onConfirmPasswordChange = viewModel::onConfirmPasswordChange,
                 onAccountTypeChange = viewModel::onAccountTypeChange,
                 onTerminosChange = viewModel::onTerminosChange,
-                onSelectFrontDocument = {
-                    frontDocumentPicker.launch("image/*")
-                },
-                onSelectBackDocument = {
-                    backDocumentPicker.launch("image/*")
-                },
                 onContinuar = viewModel::onContinuarClick,
                 modifier = Modifier
             )
@@ -172,8 +140,6 @@ private fun RegistroContent(
     onConfirmPasswordChange: (String) -> Unit,
     onAccountTypeChange: (Boolean) -> Unit,
     onTerminosChange: (Boolean) -> Unit,
-    onSelectFrontDocument: () -> Unit,
-    onSelectBackDocument: () -> Unit,
     onContinuar: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -216,30 +182,7 @@ private fun RegistroContent(
                 )
             }
 
-            LinearProgressIndicator(
-                progress = { if (state.currentStep == 2) 1f else 0.5f },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.dp),
-                color = azulPrincipal,
-                trackColor = Color(0xFFE0E4E8)
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = if (state.currentStep == 1 && state.isOrganizer) {
-                    "Paso 1 de 2 · Datos personales"
-                } else if (state.currentStep == 2) {
-                    "Paso 2 de 2 · Verificación de identidad"
-                } else {
-                    "Datos personales"
-                },
-                fontSize = 11.sp,
-                color = azulPrincipal,
-                modifier = Modifier.fillMaxWidth()
-            )
-
+            Text("Datos personales", color = azulPrincipal, modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(10.dp))
 
             Column(
@@ -249,7 +192,6 @@ private fun RegistroContent(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (state.currentStep == 1) {
                     RegistroField(
                         value = state.nombre,
                         onValueChange = onNombreChange,
@@ -417,51 +359,6 @@ private fun RegistroContent(
                     state.terminosError?.let {
                         Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
-                } else {
-                    Text(
-                        text = "A continuación, toma una foto de tu documento de identidad por ambos lados. Debe verse completo y con buena calidad para validar tus datos.",
-                        fontSize = 12.sp,
-                        lineHeight = 17.sp,
-                        color = TextoSecundario
-                    )
-
-                    Text(
-                        text = "1) Frente de tu documento",
-                        fontSize = 12.sp,
-                        color = TextoPrincipal
-                    )
-
-                    DocumentoSelector(
-                        selected = state.documentFrontUri != null,
-                        onClick = onSelectFrontDocument
-                    )
-
-                    Text(
-                        text = "2) Atrás de tu documento",
-                        fontSize = 12.sp,
-                        color = TextoPrincipal
-                    )
-
-                    DocumentoSelector(
-                        selected = state.documentBackUri != null,
-                        onClick = onSelectBackDocument
-                    )
-
-                    state.documentError?.let { error ->
-                        Text(
-                            text = error,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-
-                    Text(
-                        text = "La documentación se simula localmente en esta versión. No se envía a un servidor.",
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp,
-                        color = TextoSecundario
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -469,8 +366,7 @@ private fun RegistroContent(
             Button(
                 onClick = onContinuar,
                 enabled = state.isFormValid &&
-                        state.registroResult != RequestResult.Loading &&
-                        (state.currentStep == 1 || state.documentsAreSelected),
+                        state.registroResult != RequestResult.Loading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
@@ -483,7 +379,7 @@ private fun RegistroContent(
                 )
             ) {
                 Text(
-                    text = "Continuar",
+                    text = "Crear cuenta",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -577,60 +473,6 @@ private fun RoleOption(
     }
 }
 
-@Composable
-private fun DocumentoSelector(
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val azulPrincipal = MaterialTheme.colorScheme.primary
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(88.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(6.dp),
-        color = Color.White,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (selected) azulPrincipal else Gris
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = if (selected) {
-                    Icons.Outlined.CheckCircle
-                } else {
-                    Icons.Outlined.CameraAlt
-                },
-                contentDescription = null,
-                tint = if (selected) azulPrincipal else TextoSecundario,
-                modifier = Modifier.size(25.dp)
-            )
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Column {
-                Text(
-                    text = if (selected) "Documento seleccionado" else "Toca para seleccionar una foto",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (selected) azulPrincipal else TextoPrincipal
-                )
-                Text(
-                    text = if (selected) "Puedes volver a seleccionarlo" else "Frente o reverso de la cédula",
-                    fontSize = 10.sp,
-                    color = TextoSecundario
-                )
-            }
-        }
-    }
-}
-
 @Preview(
     showBackground = true,
     showSystemUi = true,
@@ -652,8 +494,6 @@ private fun RegistroScreenPreview() {
             onConfirmPasswordChange = {},
             onAccountTypeChange = {},
             onTerminosChange = {},
-            onSelectFrontDocument = {},
-            onSelectBackDocument = {},
             onContinuar = {}
         )
     }

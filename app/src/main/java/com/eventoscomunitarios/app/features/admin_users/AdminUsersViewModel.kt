@@ -6,11 +6,17 @@ import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.AccountStatus
 import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.domain.model.UserRole
-import com.eventoscomunitarios.app.features.auth.FakeUsers
+import com.eventoscomunitarios.app.domain.usecase.UserUseCases
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 
 enum class UserFilter(val label: String) {
     ALL("Todos"),
@@ -24,7 +30,8 @@ data class AdminUsersUiState(
     val query: String = "",
     val selectedFilter: UserFilter = UserFilter.ALL,
     val users: List<User> = emptyList(),
-    val feedback: String? = null
+    val feedback: String? = null,
+    val isSaving: Boolean = false
 ) {
     val visibleUsers: List<User>
         get() = users.filter { user ->
@@ -38,18 +45,31 @@ data class AdminUsersUiState(
     val suspendedCount: Int get() = users.count { it.accountStatus == AccountStatus.SUSPENDED }
 }
 
-class AdminUsersViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
+@HiltViewModel
+class AdminUsersViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle, private val userUseCases: UserUseCases
+) : ViewModel() {
     private val userId: String = savedStateHandle["userId"] ?: ""
     private val _uiState = MutableStateFlow(AdminUsersUiState(userId = userId))
     val uiState: StateFlow<AdminUsersUiState> = _uiState.asStateFlow()
 
     init {
-        val admin = FakeUsers.users.firstOrNull { it.id == userId }
+        refresh()
+        viewModelScope.launch { merge(userUseCases.users.map { Unit }, userUseCases.syncState.map { Unit }).collect { refresh() } }
+    }
+
+    private fun refresh() {
+        val admin = userUseCases.findUser(userId)
+        val sync = userUseCases.syncState.value
         _uiState.update {
-            if (admin?.role == UserRole.ADMINISTRATOR && admin.accountStatus == AccountStatus.ACTIVE) {
-                it.copy(users = FakeUsers.users.toList(), loadResult = RequestResult.Success)
+            if (sync.isLoading && admin == null) {
+                it.copy(loadResult = RequestResult.Loading)
+            } else if (sync.error != null) {
+                it.copy(loadResult = RequestResult.Failure(sync.error))
+            } else if (admin?.role == UserRole.ADMINISTRATOR && admin.accountStatus == AccountStatus.ACTIVE) {
+                it.copy(users = userUseCases.users.value, loadResult = RequestResult.Success)
             } else {
-                it.copy(loadResult = RequestResult.Failure("No tienes permisos de administrador"))
+                it.copy(users = emptyList(), loadResult = RequestResult.Failure("No tienes permisos de administrador"))
             }
         }
     }
@@ -59,15 +79,25 @@ class AdminUsersViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
     fun selectFilter(filter: UserFilter) = _uiState.update { it.copy(selectedFilter = filter) }
 
     fun toggleAccountStatus(targetUserId: String) {
-        val user = FakeUsers.users.firstOrNull { it.id == targetUserId } ?: return
+        if (_uiState.value.isSaving) return
+        val user = userUseCases.findUser(targetUserId) ?: return
         if (user.role == UserRole.ADMINISTRATOR) return
         val status = if (user.accountStatus == AccountStatus.ACTIVE) AccountStatus.SUSPENDED else AccountStatus.ACTIVE
-        val updated = FakeUsers.updateAccountStatus(targetUserId, status) ?: return
+        _uiState.update { it.copy(isSaving = true) }
+        viewModelScope.launch {
+        val result = userUseCases.updateAccountStatus(userId, targetUserId, status)
+        if (result.isFailure) {
+            _uiState.update { it.copy(isSaving = false, feedback = result.exceptionOrNull()?.message) }
+            return@launch
+        }
+        val updated = result.getOrThrow()
         _uiState.update { state ->
             state.copy(
-                users = FakeUsers.users.toList(),
+                isSaving = false,
+                users = userUseCases.users.value,
                 feedback = if (updated.accountStatus == AccountStatus.SUSPENDED) "Usuario suspendido" else "Usuario reactivado"
             )
+        }
         }
     }
 

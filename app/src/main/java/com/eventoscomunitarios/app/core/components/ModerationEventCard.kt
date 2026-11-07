@@ -3,30 +3,26 @@ package com.eventoscomunitarios.app.core.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.eventoscomunitarios.app.core.util.eventFormDate
+import com.eventoscomunitarios.app.core.util.eventFormTime
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventModerationStatus
-import com.eventoscomunitarios.app.ui.theme.TextoPrincipal
-import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 
 @Composable
 fun ModerationEventCard(
@@ -34,49 +30,80 @@ fun ModerationEventCard(
     compact: Boolean = false,
     onReject: () -> Unit,
     onDetail: () -> Unit,
-    onApprove: () -> Unit
+    onApprove: () -> Unit,
+    onDelete: (() -> Unit)? = null,
+    onFinish: (() -> Unit)? = null
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(event.title, fontWeight = FontWeight.SemiBold, color = TextoPrincipal, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("${event.submittedByName} · ${event.submittedAtLabel}", fontSize = 12.sp, color = TextoSecundario, maxLines = 1)
-                }
-                if (!compact) AssistChip(onClick = {}, label = { Text(statusLabel(event.moderationStatus), fontSize = 11.sp) })
+            if (!compact && event.photoUri != null) {
+                RemoteImage(event.photoUri, "Foto de ${event.title}", Modifier.fillMaxWidth().height(160.dp))
             }
+            Text(event.title, style = MaterialTheme.typography.titleMedium)
+            Text(event.organizerName, style = MaterialTheme.typography.bodySmall)
+            Text(if (event.isFinished) "Finalizado" else statusLabel(event.moderationStatus), color = MaterialTheme.colorScheme.primary)
             if (!compact) {
-                Text("${event.dateLabel} · ${event.timeLabel} · ${event.location}", fontSize = 12.sp, color = TextoSecundario)
-                AssistChip(onClick = {}, label = { Text(event.category.displayName, fontSize = 11.sp) })
+                Text("Inicio: ${event.dateLabel} · ${event.timeLabel}", style = MaterialTheme.typography.bodySmall)
+                Text("Fin: ${eventFormDate(event.endsAt)} · ${eventFormTime(event.endsAt)}", style = MaterialTheme.typography.bodySmall)
+                Text("${event.category.displayName} · ${event.location}", style = MaterialTheme.typography.bodySmall)
+                Text("${event.attendeeCount}/${event.capacity} asistentes", style = MaterialTheme.typography.bodySmall)
             }
-            when (event.moderationStatus) {
-                EventModerationStatus.PENDING -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            event.rejectionReason?.let { Text("Motivo: $it", color = MaterialTheme.colorScheme.error) }
+            OutlinedButton(onClick = onDetail) { Text("Ver detalle") }
+            if (event.moderationStatus == EventModerationStatus.PENDING) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onReject) { Text("Rechazar") }
-                    Spacer(Modifier.width(8.dp))
-                    if (!compact) {
-                        OutlinedButton(onClick = onDetail) { Text("Detalle") }
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Button(
-                        onClick = onApprove,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B638B))
-                    ) { Text("Aprobar") }
+                    Button(onClick = onApprove) { Text("Aprobar") }
                 }
-                else -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    OutlinedButton(onClick = onDetail) { Text("Ver detalle") }
+            }
+            if (onDelete != null || onFinish != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (onFinish != null && event.moderationStatus == EventModerationStatus.APPROVED && !event.isFinished && event.startsAt <= System.currentTimeMillis()) {
+                        TextButton(onClick = onFinish) { Text("Finalizar") }
+                    }
+                    if (onDelete != null) {
+                        TextButton(onClick = onDelete) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }
+                    }
                 }
             }
         }
     }
 }
 
+@Composable
+fun ModerationActionDialog(
+    title: String,
+    description: String,
+    reason: String? = null,
+    error: String? = null,
+    onReasonChange: (String) -> Unit = {},
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(description)
+                if (reason != null) {
+                    OutlinedTextField(
+                        value = reason, onValueChange = onReasonChange,
+                        label = { Text("Motivo del rechazo") }, minLines = 3,
+                        isError = error != null,
+                        supportingText = error?.let { message -> { Text(message) } },
+                        modifier = Modifier.fillMaxWidth().testTag("rejection_reason")
+                    )
+                } else if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Confirmar") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
 private fun statusLabel(status: EventModerationStatus): String = when (status) {
-    EventModerationStatus.PENDING -> "Pendiente"
+    EventModerationStatus.PENDING -> "Pendiente de revisión"
     EventModerationStatus.APPROVED -> "Aprobado"
     EventModerationStatus.REJECTED -> "Rechazado"
 }

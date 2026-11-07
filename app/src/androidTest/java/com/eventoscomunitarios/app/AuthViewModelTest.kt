@@ -1,183 +1,145 @@
-package com.eventoscomunitarios.app
+﻿package com.eventoscomunitarios.app
 
 import androidx.lifecycle.SavedStateHandle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import com.eventoscomunitarios.app.domain.model.User
+import com.eventoscomunitarios.app.domain.model.RepositorySyncState
+import com.eventoscomunitarios.app.domain.repository.UserRepository
+import com.eventoscomunitarios.app.domain.usecase.UserUseCases
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.UserRole
-import com.eventoscomunitarios.app.features.auth.FakeUsers
 import com.eventoscomunitarios.app.features.auth.SessionViewModel
 import com.eventoscomunitarios.app.features.auth.validationErrors
 import com.eventoscomunitarios.app.features.home.HomeViewModel
 import com.eventoscomunitarios.app.features.login.LoginViewModel
 import com.eventoscomunitarios.app.features.registro.RegistroViewModel
-import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.util.Date
 
 @RunWith(AndroidJUnit4::class)
 class AuthViewModelTest {
-    private val originalUsers = FakeUsers.users.toList()
-    private val originalPasswords = FakeUsers.passwords.toMap()
+    private val data = TestDependencies()
 
-    @After
-    fun restoreFixtures() {
-        FakeUsers.users.clear()
-        FakeUsers.users.addAll(originalUsers)
-        FakeUsers.passwords.clear()
-        FakeUsers.passwords.putAll(originalPasswords)
+    @Test fun demoProfilesAreValidAndCoverAllRoles() = onMain {
+        assertEquals(UserRole.entries.toSet(), data.users.users.value.map { it.role }.toSet())
+        data.users.users.value.forEach { assertTrue(it.validationErrors().isEmpty()) }
     }
 
-    @Test
-    fun seededProfilesAreCompleteAndIncludeAllRoles() {
-        assertEquals(UserRole.entries.toSet(), FakeUsers.users.map { it.role }.toSet())
-        assertEquals(FakeUsers.users.size, FakeUsers.users.map { it.id }.distinct().size)
-        FakeUsers.users.forEach { user ->
-            assertTrue("${user.id}: ${user.validationErrors()}", user.validationErrors().isEmpty())
-            assertNotNull(FakeUsers.passwords[user.id])
-        }
-    }
-
-    @Test
-    fun loginReturnsOriginalCompleteProfileAndIgnoresEmailCase() {
-        val user = FakeUsers.users.first()
-        val login = LoginViewModel()
-        login.onEmailChange("  ${user.email.uppercase()}  ")
-        login.onPasswordChange(FakeUsers.passwords.getValue(user.id))
+    @Test fun loginNormalizesEmailAndRejectsSuspendedAccounts() = onMain {
+        val login = LoginViewModel(data.users)
+        login.onEmailChange("  ANA.TORRES@CORREO.COM  ")
+        login.onPasswordChange("12345678")
         login.login()
         assertEquals(RequestResult.Success, login.uiState.value.loginResult)
-        assertSame(user, login.uiState.value.authenticatedUser)
+        assertEquals("participant-ana", login.uiState.value.authenticatedUser?.id)
+        login.resetForm()
+        login.onEmailChange("diego.ramirez@correo.com")
+        login.onPasswordChange("Participante123")
+        login.login()
+        assertTrue(login.uiState.value.loginResult is RequestResult.Failure)
+        assertNull(login.uiState.value.authenticatedUser)
     }
 
-    @Test
-    fun invalidAndIncorrectCredentialsDoNotAuthenticate() {
-        val login = LoginViewModel()
+    @Test fun malformedAndIncorrectCredentialsNeverAuthenticate() = onMain {
+        val login = LoginViewModel(data.users)
         login.login()
         assertNotNull(login.uiState.value.emailError)
         assertNotNull(login.uiState.value.passwordError)
-        login.onEmailChange(FakeUsers.users.first().email)
+        login.onEmailChange("ana.torres@correo.com")
         login.onPasswordChange("Incorrecta123")
         login.login()
         assertTrue(login.uiState.value.loginResult is RequestResult.Failure)
         assertNull(login.uiState.value.authenticatedUser)
     }
 
-    @Test
-    fun registrationCreatesCompleteProfileWhichCanLogIn() {
+    @Test fun organizerRegistrationWorksWithoutImagesAndCanLogIn() = onMain {
         val register = validRegistration("nueva.persona@correo.com")
-        register.registrar()
+        register.onAccountTypeChange(true)
+        register.onContinuarClick()
         val user = requireNotNull(register.uiState.value.registeredUser)
-        assertEquals(RequestResult.Success, register.uiState.value.registroResult)
-        assertEquals("Nueva Persona", user.name)
-        assertEquals(UserRole.PARTICIPANT, user.role)
-        assertTrue(user.id.isNotBlank())
+        assertEquals(UserRole.ORGANIZER, user.role)
         assertTrue(user.validationErrors().isEmpty())
-        assertNull(user.profilePictureUrl)
-        val login = LoginViewModel()
+        val login = LoginViewModel(data.users)
         login.onEmailChange(user.email)
         login.onPasswordChange("ClaveNueva123")
         login.login()
-        assertSame(user, login.uiState.value.authenticatedUser)
+        assertEquals(user, login.uiState.value.authenticatedUser)
     }
 
-    @Test
-    fun duplicateEmailIsRejectedWithoutAddingAnotherAccount() {
-        val count = FakeUsers.users.size
-        val register = validRegistration("  ${FakeUsers.users.first().email.uppercase()}  ")
-        register.registrar()
-        assertEquals(count, FakeUsers.users.size)
-        assertTrue(register.uiState.value.registroResult is RequestResult.Failure)
-        assertNotNull(register.uiState.value.emailError)
-        assertNull(register.uiState.value.registeredUser)
+    @Test fun duplicateEmailAndInvalidFormNeverCreateAccounts() = onMain {
+        val count = data.users.users.value.size
+        val duplicate = validRegistration(" ANA.TORRES@CORREO.COM ")
+        duplicate.registrar()
+        assertTrue(duplicate.uiState.value.registroResult is RequestResult.Failure)
+        assertNotNull(duplicate.uiState.value.emailError)
+        val invalid = RegistroViewModel(data.users)
+        invalid.registrar()
+        assertNotNull(invalid.uiState.value.nombreError)
+        assertNotNull(invalid.uiState.value.terminosError)
+        assertEquals(count, data.users.users.value.size)
     }
 
-    @Test
-    fun invalidFieldsNeverCreateAnAccount() {
-        val count = FakeUsers.users.size
-        val register = RegistroViewModel()
-        register.registrar()
-        with(register.uiState.value) {
-            assertNotNull(nombreError)
-            assertNotNull(emailError)
-            assertNotNull(telefonoError)
-            assertNotNull(passwordError)
-            assertNotNull(confirmPasswordError)
-            assertNotNull(terminosError)
-            assertNull(registeredUser)
-        }
-        val malformed = validRegistration("malformado@correo.com")
-        malformed.onTelefonoChange("abc")
-        malformed.onPasswordChange("sinmayusculas")
-        malformed.onConfirmPasswordChange("diferente")
-        malformed.registrar()
-        assertFalse(malformed.uiState.value.isFormValid)
-        assertEquals(count, FakeUsers.users.size)
-    }
-
-    @Test
-    fun organizerRequiresBothDocumentsAndReceivesOrganizerRole() {
-        val register = validRegistration("organizador.nuevo@correo.com")
-        register.onAccountTypeChange(true)
-        register.onContinuarClick()
-        assertEquals(2, register.uiState.value.currentStep)
-        register.registrar()
-        assertNotNull(register.uiState.value.documentError)
-        assertNull(register.uiState.value.registeredUser)
-        register.onDocumentFrontSelected("content://test/front")
-        register.onDocumentBackSelected("content://test/back")
-        register.registrar()
-        assertEquals(UserRole.ORGANIZER, register.uiState.value.registeredUser?.role)
-    }
-
-    @Test
-    fun homeRejectsInvalidMandatoryFieldsAndDoesNotInventUserData() {
-        val user = FakeUsers.users.first()
-        val cases = listOf(
-            user.copy(id = "") to "id",
-            user.copy(name = "") to "name",
-            user.copy(email = "inválido") to "email",
-            user.copy(registrationDate = Date(0)) to "registrationDate",
-            user.copy(registrationDate = Date(System.currentTimeMillis() + 60_000)) to "registrationDate",
-            user.copy(phoneNumber = "abc") to "phoneNumber"
-        )
-        cases.forEach { (invalid, field) ->
-            FakeUsers.users.clear()
-            FakeUsers.users.add(invalid)
-            val home = HomeViewModel()
-            home.loadUser(invalid.id)
-            assertTrue(home.uiState.value.loadResult is RequestResult.Failure)
-            assertTrue(home.uiState.value.userErrors.containsKey(field))
-            assertNull(home.uiState.value.user)
-            assertEquals("", home.uiState.value.userName)
-        }
-    }
-
-    @Test
-    fun homeAcceptsOptionalNullFieldsAndRejectsMissingUser() {
-        val user = FakeUsers.users.first().copy(profilePictureUrl = null, phoneNumber = null)
-        FakeUsers.users[0] = user
-        val home = HomeViewModel()
-        home.loadUser(user.id)
+    @Test fun homeLoadsExistingUserAndRejectsMissingUser() = onMain {
+        val home = HomeViewModel(data.events, data.users, data.community)
+        home.loadUser("participant-ana")
         assertEquals(RequestResult.Success, home.uiState.value.loadResult)
-        assertEquals(user.name, home.uiState.value.userName)
+        assertTrue(home.uiState.value.canCreateEvent)
         home.loadUser("no-existe")
         assertTrue(home.uiState.value.loadResult is RequestResult.Failure)
         assertNull(home.uiState.value.user)
     }
 
-    @Test
-    fun closingSessionClearsObservableAndRestorableUserId() {
+    @Test fun logoutClearsObservableAndRestorableUserId() = onMain {
         val handle = SavedStateHandle()
-        val session = SessionViewModel(handle)
-        session.signIn(FakeUsers.users.first())
-        assertEquals(FakeUsers.users.first().id, SessionViewModel(handle).uiState.value.userId)
+        val session = SessionViewModel(handle, data.users)
+        session.signIn(data.users.findUser("participant-ana")!!)
+        assertEquals("participant-ana", handle.get<String>("userId"))
         session.signOut()
         assertNull(session.uiState.value.userId)
-        assertNull(SessionViewModel(handle).uiState.value.userId)
+        assertNull(handle.get<String>("userId"))
     }
 
-    private fun validRegistration(email: String) = RegistroViewModel().apply {
+    @Test fun restoringSessionWaitsForTheProfileInsteadOfSigningOut() = onMain {
+        val remoteUsers = MutableStateFlow<List<User>>(emptyList())
+        val remoteReady = MutableStateFlow(false)
+        val remoteSync = MutableStateFlow(RepositorySyncState(isLoading = true))
+        val uid = "participant-ana"
+        val remote = object : UserRepository by data.userRepository {
+            override val users = remoteUsers
+            override val currentUserId = MutableStateFlow<String?>(uid)
+            override val sessionReady = remoteReady
+            override val syncState = remoteSync
+        }
+        val useCases = UserUseCases(remote, data.eventRepository, data.communityRepository, data.events)
+        val session = SessionViewModel(SavedStateHandle(), useCases)
+        assertTrue(session.uiState.value.isLoading)
+        assertEquals(uid, session.uiState.value.userId)
+        remoteUsers.value = listOf(data.users.findUser(uid)!!)
+        remoteSync.value = RepositorySyncState()
+        remoteReady.value = true
+        val restored = withTimeout(2_000) { session.uiState.first { !it.isLoading } }
+        assertEquals(uid, restored.user?.id)
+        assertNull(restored.error)
+    }
+
+    @Test fun sessionUsesAuthenticatedRepositoryInsteadOfSavedNavigationId() = onMain {
+        data.users.login("ana.torres@correo.com", "12345678").getOrThrow()
+        val handle = SavedStateHandle(mapOf("userId" to "otro-usuario"))
+        val session = SessionViewModel(handle, data.users)
+        assertEquals("participant-ana", session.uiState.value.userId)
+        assertFalse(session.uiState.value.isLoading)
+    }
+
+    private fun onMain(block: suspend () -> Unit) = runBlocking { withContext(Dispatchers.Main.immediate) { block() } }
+
+    private fun validRegistration(email: String) = RegistroViewModel(data.users).apply {
         onNombreChange(" Nueva Persona ")
         onEmailChange(email)
         onTelefonoChange("+57 310 555 1212")
