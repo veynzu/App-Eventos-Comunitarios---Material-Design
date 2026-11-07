@@ -2,6 +2,7 @@ package com.eventoscomunitarios.app
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -17,6 +18,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertFalse
 import android.os.SystemClock
+import android.graphics.Bitmap
+import java.io.File
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.eventoscomunitarios.app.core.data.InMemoryUserRepository
 import org.junit.Rule
@@ -131,7 +134,7 @@ class NavigationFlowTest {
             compose.onAllNodesWithTag("event_map").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithTag("event_map").assertIsDisplayed()
-        compose.onNodeWithTag("map_nav_home").performClick()
+        compose.onNodeWithTag("main_nav_home").performClick()
         waitForScreen("Hola, Ana María Torres")
 
         compose.onNodeWithText("Perfil").performClick()
@@ -150,8 +153,77 @@ class NavigationFlowTest {
         compose.onNodeWithTag("admin_nav_users").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("admin_users_screen").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("admin_users_screen").assertIsDisplayed()
-        compose.onNodeWithTag("admin_nav_profile").performClick()
+        compose.onNodeWithTag("main_nav_profile").performClick()
         waitForScreen("Mi perfil")
+    }
+
+    @Test
+    fun bottomBarRemainsVisibleAndRestoresSectionsWithoutDuplicatingThem() {
+        loginAs("participant-ana")
+        compose.onNodeWithTag("main_bottom_bar").assertIsDisplayed()
+        compose.onNodeWithTag("main_nav_home").assertIsSelected()
+        compose.onNodeWithTag("main_nav_admin").assertDoesNotExist()
+
+        compose.onNodeWithTag("main_nav_events").performClick()
+        waitForScreen("Mis eventos")
+        compose.onNodeWithTag("main_nav_events").assertIsSelected()
+        compose.onNodeWithText("Creados").performClick()
+        capture("navigation-my-events")
+
+        compose.onNodeWithTag("main_nav_profile").performClick()
+        waitForScreen("Mi perfil")
+        compose.onNodeWithTag("main_nav_profile").assertIsSelected()
+        compose.onNodeWithTag("main_bottom_bar").assertIsDisplayed()
+        capture("navigation-profile")
+
+        compose.onNodeWithTag("main_nav_map").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("event_map").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("main_nav_map").assertIsSelected()
+        compose.onNodeWithTag("main_nav_events").performClick()
+        waitForScreen("Mis eventos")
+        compose.onNodeWithText("Creados").assertIsSelected()
+        repeat(3) { compose.onNodeWithTag("main_nav_events").performClick() }
+        compose.waitForIdle()
+        pressBack()
+        waitForScreen("Hola, Ana María Torres")
+        compose.onNodeWithTag("main_nav_home").assertIsSelected()
+    }
+
+    @Test
+    fun administratorCanReturnToPanelFromCreateExploreMapAndProfile() {
+        loginAs("administrator-laura")
+        compose.onNodeWithTag("main_nav_admin").assertIsSelected()
+        compose.onNodeWithText("Crear evento").performClick()
+        waitForScreen("Crear evento")
+        compose.onNodeWithTag("create_event_screen").assertIsDisplayed()
+        compose.onNodeWithTag("main_bottom_bar").assertIsDisplayed()
+        capture("navigation-admin-create")
+        compose.onNodeWithTag("main_nav_admin").performClick()
+        waitForScreen("Panel de control")
+        compose.onNodeWithTag("create_event_screen").assertDoesNotExist()
+
+        compose.onNodeWithText("Explorar eventos").performClick()
+        waitForScreen("Hola, Laura Rojas")
+        compose.onNodeWithTag("main_nav_home").assertIsSelected()
+        compose.onNodeWithTag("main_nav_map").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("event_map").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("main_nav_admin").assertIsDisplayed().performClick()
+        waitForScreen("Panel de control")
+
+        compose.onNodeWithTag("main_nav_profile").performClick()
+        waitForScreen("Mi perfil")
+        compose.onNodeWithTag("main_nav_profile").assertIsSelected()
+        compose.onNodeWithTag("main_nav_admin").performClick()
+        waitForScreen("Panel de control")
+        compose.onNodeWithTag("admin_nav_users").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("admin_users_screen").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("main_nav_admin").assertIsSelected().performClick()
+        waitForScreen("Panel de control")
+        compose.onNodeWithTag("admin_users_screen").assertDoesNotExist()
+        compose.onNodeWithText("Crear evento").performClick()
+        waitForScreen("Crear evento")
+        pressBack()
+        waitForScreen("Panel de control")
     }
 
     private fun openLogin() {
@@ -166,7 +238,19 @@ class NavigationFlowTest {
         compose.onAllNodes(hasSetTextAction())[1].performTextInput(password(user.id))
         compose.onAllNodes(hasSetTextAction())[1].performImeAction()
         compose.onNodeWithText("Iniciar sesión").performScrollTo().assertIsEnabled().performClick()
-        waitForScreen("Hola, ${user.name}")
+        waitForScreen(if (userId == "administrator-laura") "Panel de control" else "Hola, ${user.name}")
+    }
+
+    private fun capture(name: String) {
+        compose.waitForIdle()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val directory = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let(::File)
+            ?: File(compose.activity.getExternalFilesDir(null), "screenshots")
+        directory.mkdirs()
+        val file = File(directory, "$name.png")
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        instrumentation.sendStatus(2, android.os.Bundle().apply { putString("additionalTestOutputFile_$name", file.absolutePath) })
     }
 
     private fun waitForScreen(text: String) {

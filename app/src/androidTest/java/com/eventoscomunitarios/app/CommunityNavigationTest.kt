@@ -1,6 +1,11 @@
 ﻿package com.eventoscomunitarios.app
 
 import android.graphics.Bitmap
+import javax.inject.Inject
+import androidx.test.platform.app.InstrumentationRegistry
+import com.eventoscomunitarios.app.domain.repository.EventRepository
+import com.eventoscomunitarios.app.core.data.InMemoryEventRepository
+import kotlinx.coroutines.runBlocking
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
@@ -38,6 +43,7 @@ import dagger.hilt.android.testing.HiltAndroidRule
 @RunWith(AndroidJUnit4::class)
 @HiltAndroidTest
 class CommunityNavigationTest {
+    @Inject lateinit var eventRepository: EventRepository
     @get:Rule(order = 0) val hilt = HiltAndroidRule(this)
     @get:Rule(order = 1) val compose = createAndroidComposeRule<MainActivity>()
 
@@ -62,6 +68,14 @@ class CommunityNavigationTest {
         compose.onNodeWithText("1 positivos").performClick()
         compose.onNodeWithText("0 positivos").assertIsDisplayed()
 
+        hilt.inject()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            runBlocking {
+                val repository = eventRepository as InMemoryEventRepository
+                repository.save(repository.events.value.first { it.id == 1 }.copy(
+                    startsAt = System.currentTimeMillis() - 7200000, endsAt = System.currentTimeMillis() - 1000, isFinished = true))
+            }
+        }
         compose.onNode(lazyList).performScrollToNode(hasSetTextAction())
         compose.onNode(hasSetTextAction()).performTextInput("Prueba de navegación comunitaria")
         closeSoftKeyboard()

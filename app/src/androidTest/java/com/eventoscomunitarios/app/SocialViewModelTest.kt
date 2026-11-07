@@ -24,6 +24,7 @@ class SocialViewModelTest {
     @After fun clearViewModels() = onMain { models.clear() }
 
     @Test fun commentsCanBePostedAndModeratedWithNotifications() = onMain {
+        finishedParticipation("participant-ana", 1)
         val participant = detail("participant-ana")
         participant.onCommentChange("   ")
         participant.addComment()
@@ -70,7 +71,9 @@ class SocialViewModelTest {
     }
 
     @Test fun profileValidatesFieldsAndUpdatesPublishedAuthorNames() = onMain {
-        val comment = data.community.addComment("organizer-carlos", 1, "Los esperamos").getOrThrow()
+        data.eventRepository.save(data.events.findEvent(2)!!.copy(organizerId = "participant-laura"))
+        finishedParticipation("organizer-carlos", 2)
+        val comment = data.community.addComment("organizer-carlos", 2, "Los esperamos").getOrThrow()
         val profile = tracked(ProfileViewModel(data.users, data.events, data.community))
         profile.loadUser("organizer-carlos")
         profile.startEditing()
@@ -91,11 +94,12 @@ class SocialViewModelTest {
         assertEquals("carlos.actualizado@correo.com", profile.uiState.value.user?.pendingEmail)
         val eventDetail = detail("organizer-carlos")
         assertEquals("Carlos Gómez Actualizado", eventDetail.uiState.value.event?.organizerName)
-        assertEquals("Carlos Gómez Actualizado", eventDetail.uiState.value.comments.first { it.id == comment.id }.authorName)
+        assertEquals("Carlos Gómez Actualizado", detail("organizer-carlos", 2).uiState.value.comments.first { it.id == comment.id }.authorName)
         assertEquals(1, profile.uiState.value.statistics?.comments)
     }
 
     @Test fun deletingAccountCleansSocialDataAndPromotesWaitingUser() = onMain {
+        finishedParticipation("participant-laura", 2)
         data.community.addComment("participant-laura", 2, "Me interesa asistir").getOrThrow()
         data.community.vote("participant-laura", 2, 1).getOrThrow()
         val profile = tracked(ProfileViewModel(data.users, data.events, data.community))
@@ -130,8 +134,13 @@ class SocialViewModelTest {
         assertTrue(notices.uiState.value.items.first { it.notification.id == item.notification.id }.notification.isRead)
     }
 
-    private fun detail(userId: String) = tracked(EventDetailViewModel(handle(userId), data.events, data.users, data.community))
-    private fun handle(userId: String) = SavedStateHandle(mapOf("userId" to userId, "eventId" to 1))
+    private fun detail(userId: String, eventId: Int = 1) = tracked(EventDetailViewModel(handle(userId, eventId), data.events, data.users, data.community))
+    private suspend fun finishedParticipation(userId: String, eventId: Int) {
+        if (data.events.registrations.value.none { it.userId == userId && it.eventId == eventId }) data.events.register(userId, eventId).getOrThrow()
+        data.eventRepository.save(data.events.findEvent(eventId)!!.copy(startsAt = System.currentTimeMillis() - 7200000,
+            endsAt = System.currentTimeMillis() - 1000, isFinished = true))
+    }
+    private fun handle(userId: String, eventId: Int = 1) = SavedStateHandle(mapOf("userId" to userId, "eventId" to eventId))
     private fun <T : ViewModel> tracked(viewModel: T): T = viewModel.also { models.put("model-${sequence++}", it) }
     private fun onMain(block: suspend () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync { runBlocking { block() } }
 }

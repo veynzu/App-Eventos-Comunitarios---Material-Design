@@ -16,8 +16,9 @@ interface CommunityRepository {
     suspend fun toggleVote(userId: String, eventId: Int, value: Int)
     suspend fun notify(userId: String, title: String, message: String, eventId: Int? = null)
     suspend fun markRead(userId: String, notificationId: Int?)
-    suspend fun toggleFavorite(userId: String, eventId: Int)
+    suspend fun toggleFavorite(userId: String, eventId: Int, seriesId: Int = eventId)
+    suspend fun favoriteUserIds(seriesId: Int): Set<String>
     suspend fun toggleFollow(userId: String, organizerId: String)
-    suspend fun removeForEvent(eventId: Int)
+    suspend fun removeForEvent(eventId: Int, favoriteSeriesId: Int? = eventId)
     suspend fun removeForUser(userId: String)
 }

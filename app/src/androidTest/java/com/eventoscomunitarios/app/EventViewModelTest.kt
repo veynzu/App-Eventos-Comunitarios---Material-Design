@@ -137,7 +137,7 @@ class EventViewModelTest {
             onDateChange(eventFormDate(start)); onTimeChange(eventFormTime(start))
             onEndDateChange(eventFormDate(end)); onEndTimeChange(eventFormTime(end))
             onDescriptionChange("Actividad abierta para compartir con la comunidad.")
-            onAddressChange("Salón comunal")
+            onLocationSelected(com.eventoscomunitarios.app.domain.model.Coordinates.ARMENIA, "Salón comunal")
             onCapacityChange("25")
         }
     }

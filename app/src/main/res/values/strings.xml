@@ -1,3 +1,27 @@
 <resources>
     <string name="app_name">appeventoscomunitarios</string>
+    <string name="nav_home">Inicio</string>
+    <string name="nav_map">Mapa</string>
+    <string name="nav_my_events">Mis eventos</string>
+    <string name="nav_profile">Perfil</string>
+    <string name="nav_admin">Admin</string>
+    <string name="nav_admin_dashboard">Panel</string>
+    <string name="nav_admin_moderation">Moderación</string>
+    <string name="nav_admin_users">Usuarios</string>
+    <string name="nav_create_event">Crear evento</string>
+    <string name="event_distance_km">%1$.1f km</string>
+    <string name="choose_location">Elegir en el mapa</string>
+    <string name="confirm_location">Confirmar ubicación</string>
+    <string name="use_current_location">Mi ubicación actual</string>
+    <string name="tap_map_location">Toca el sitio exacto del evento o de la zona donde quieres buscar.</string>
+    <string name="location_address_reference">Dirección o referencia del lugar</string>
+    <string name="map_not_available">El mapa no está disponible. Revisa su configuración y la conexión.</string>
+    <string name="event_location">Ubicación del evento</string>
+    <string name="outdoor_event">Actividad al aire libre</string>
+    <string name="back">Atrás</string>
+    <string name="search_in_another_area">Buscar en otra zona</string>
+    <string name="relaunch_event">Volver a lanzar</string>
+    <string name="new_event_edition">Nueva edición del evento</string>
+    <string name="relaunch_event_help">Elige las nuevas fechas. Los datos anteriores se conservan y esta edición necesita aprobación del administrador.</string>
+    <string name="comments_participants_only">Solo pueden comentar quienes tuvieron inscripción confirmada, cuando el evento haya finalizado.</string>
 </resources>

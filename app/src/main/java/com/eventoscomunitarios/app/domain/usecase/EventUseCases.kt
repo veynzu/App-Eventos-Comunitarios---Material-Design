@@ -32,7 +32,18 @@ class EventUseCases @Inject constructor(
         event.organizerId != userId && event.moderationStatus == EventModerationStatus.APPROVED &&
         !event.isFinished && event.startsAt > System.currentTimeMillis()
 
-    suspend fun create(userId: String, event: Event): Result<Event> = firebaseResult {
+    fun canRelaunch(userId: String, event: Event): Boolean = activeUser(userId) != null &&
+        event.organizerId == userId && !event.isDeleted && event.hasEnded && event.moderationStatus == EventModerationStatus.APPROVED
+
+    suspend fun create(userId: String, event: Event): Result<Event> = firebaseResult { createEdition(userId, event, null) }
+
+    suspend fun relaunch(userId: String, previousEventId: Int, event: Event): Result<Event> = firebaseResult {
+        val previous = requireNotNull(findEvent(previousEventId)) { "No se encontró el evento anterior" }
+        require(canRelaunch(userId, previous)) { "Solo el creador puede volver a lanzar un evento aprobado que ya finalizó" }
+        createEdition(userId, event, previous)
+    }
+
+    private suspend fun createEdition(userId: String, event: Event, previous: Event?): Event {
         val author = requireActiveUser(userId)
         validate(event)
         val id = eventRepository.nextId()
@@ -42,7 +53,8 @@ class EventUseCases @Inject constructor(
                 id = id, title = event.title.trim(), description = event.description.trim(), location = event.location.trim(),
                 organizerId = author.id, organizerName = author.name, submittedByName = author.name,
                 attendeeCount = 0, moderationStatus = EventModerationStatus.PENDING,
-                rejectionReason = null, isFinished = false, isDeleted = false, submittedAtLabel = "ahora", photoUri = photo
+                rejectionReason = null, isFinished = false, isDeleted = false, submittedAtLabel = "ahora", photoUri = photo,
+                seriesId = previous?.seriesId ?: id, previousEventId = previous?.id
             ))
         } catch (error: Exception) {
             if (photo != event.photoUri) removePhoto(photo)
@@ -50,7 +62,7 @@ class EventUseCases @Inject constructor(
         }
         moderators().forEach { notify(it.id, "Publicación por revisar", created.title, created.id) }
         notify(userId, "Publicación enviada", "${created.title} está pendiente de revisión.", created.id)
-        created
+        return created
     }
 
     suspend fun update(userId: String, event: Event): Result<Event> = firebaseResult {
@@ -66,6 +78,8 @@ class EventUseCases @Inject constructor(
                 require(event.capacity >= confirmed) { "El cupo no puede ser menor que las asistencias confirmadas" }
                 before.copy(event = current.copy(
                     title = event.title.trim(), description = event.description.trim(), location = event.location.trim(),
+                    latitude = event.latitude, longitude = event.longitude, locationConfirmed = event.locationConfirmed,
+                    isOutdoor = event.isOutdoor,
                     category = event.category, startsAt = event.startsAt, endsAt = event.endsAt, capacity = event.capacity,
                     price = event.price, photoUri = photo, moderationStatus = EventModerationStatus.PENDING,
                     rejectionReason = null, attendeeCount = confirmed, submittedAtLabel = "ahora"
@@ -83,13 +97,19 @@ class EventUseCases @Inject constructor(
     }
 
     suspend fun moderate(userId: String, eventId: Int, status: EventModerationStatus, reason: String = ""): Result<Unit> = firebaseResult {
+        // Resolver destinatarios antes de aprobar evita reportar un fallo después de guardar la aprobación.
+        val favoriteUsers = if (status == EventModerationStatus.APPROVED)
+            communityRepository.favoriteUserIds(requireNotNull(findEvent(eventId)) { "Publicación no encontrada" }.seriesId) else emptySet()
         val change = mutate(eventId, requireActiveUser(userId)) { before, actor, activeIds ->
             val event = before.event
             require(actor.role == UserRole.ADMINISTRATOR) { "Solo un moderador puede revisar publicaciones" }
             require(!event.isDeleted && event.moderationStatus == EventModerationStatus.PENDING) { "Esta publicación ya fue revisada o eliminada" }
             require(status != EventModerationStatus.PENDING) { "Selecciona aprobar o rechazar" }
             require(status != EventModerationStatus.REJECTED || reason.isNotBlank()) { "El motivo del rechazo es obligatorio" }
-            if (status == EventModerationStatus.APPROVED) require(!event.isFinished && event.startsAt > System.currentTimeMillis()) { "No se puede aprobar un evento que ya comenzó" }
+            if (status == EventModerationStatus.APPROVED) {
+                require(event.coordinates != null) { "El creador debe confirmar la ubicación en el mapa antes de aprobar" }
+                require(!event.isFinished && event.startsAt > System.currentTimeMillis()) { "No se puede aprobar un evento que ya comenzó" }
+            }
             val updated = before.copy(event = event.copy(moderationStatus = status, rejectionReason = reason.trim().takeIf { status == EventModerationStatus.REJECTED }))
             if (status == EventModerationStatus.APPROVED) promoteWaitlist(updated, activeIds)
             else normalized(updated.copy(registrations = emptyList()))
@@ -99,8 +119,10 @@ class EventUseCases @Inject constructor(
         notify(event.organizerId, if (approved) "Publicación aprobada" else "Publicación rechazada",
             if (approved) "${event.title} ya es visible para la comunidad." else "${event.title}: ${reason.trim()}", eventId)
         if (approved) {
-            communityRepository.following.value.filter { it.organizerId == event.organizerId }.forEach {
-                if (activeUser(it.userId) != null) notify(it.userId, "Nuevo evento de alguien que sigues", event.title, eventId)
+            val followers = communityRepository.following.value.filter { it.organizerId == event.organizerId }.map { it.userId }
+            (favoriteUsers + followers).filter { it != event.organizerId && activeUser(it) != null }.forEach { recipient ->
+                notify(recipient, if (recipient in favoriteUsers) "Nueva edición de tu evento favorito" else "Nuevo evento de alguien que sigues",
+                    "${event.title}: ${event.dateLabel} a las ${event.timeLabel}. Confirma si participarás.", eventId)
             }
             notifyAttendees(change.before, "Evento aprobado", "${event.title} está aprobado. Tu inscripción se conserva.")
             notifyPromoted(change)
@@ -180,7 +202,8 @@ class EventUseCases @Inject constructor(
             notify(event.organizerId, "Publicación eliminada", "${event.title} fue eliminada.")
         }
         val cleanup: suspend () -> Unit = {
-            communityRepository.removeForEvent(eventId)
+            val keepFavorites = eventRepository.events.value.any { it.id != eventId && !it.isDeleted && it.seriesId == event.seriesId }
+            communityRepository.removeForEvent(eventId, event.seriesId.takeUnless { keepFavorites })
             eventRepository.purge(eventId, actor)
         }
         if (strictCleanup) cleanup() else try {
@@ -225,6 +248,7 @@ class EventUseCases @Inject constructor(
         else -> error("Selecciona una imagen válida")
     }
     private suspend fun removePhoto(uri: String?) {
+        if (uri != null && eventRepository.events.value.any { !it.isDeleted && it.photoUri == uri }) return
         if (uri != null && isRemoteImageUri(uri) && mediaRepository != null) bestEffort { mediaRepository.deleteImage(uri) }
     }
     private suspend fun bestEffort(block: suspend () -> Unit) {
@@ -238,6 +262,7 @@ class EventUseCases @Inject constructor(
         require(event.title.isNotBlank()) { "El título es obligatorio" }
         require(event.description.isNotBlank()) { "La descripción es obligatoria" }
         require(event.location.isNotBlank()) { "La dirección es obligatoria" }
+        require(event.coordinates != null) { "Elige y confirma la ubicación del evento en el mapa" }
         require(event.capacity > 0) { "El cupo debe ser mayor que cero" }
         require(event.price >= 0) { "El precio no puede ser negativo" }
         require(event.startsAt > System.currentTimeMillis()) { "La fecha de inicio debe estar en el futuro" }

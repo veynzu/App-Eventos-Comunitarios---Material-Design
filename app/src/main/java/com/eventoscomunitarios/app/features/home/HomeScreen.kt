@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,12 +27,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,6 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import com.eventoscomunitarios.app.R
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,6 +64,8 @@ import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.domain.model.UserRole
 import com.eventoscomunitarios.app.domain.model.User
 import java.util.Date
+import com.eventoscomunitarios.app.core.components.SearchLocationControls
+import com.eventoscomunitarios.app.features.locationpicker.LocationPickerDialog
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.AzulClaro
 import com.eventoscomunitarios.app.ui.theme.Fondo
@@ -79,12 +78,9 @@ fun HomeScreen(
     userId: String,
     viewModel: HomeViewModel = hiltViewModel(),
     onAbrirMapa: () -> Unit = {},
-    onAbrirMisEventos: () -> Unit = {},
     onAbrirPerfil: () -> Unit = {},
-    onCrearEvento: () -> Unit = {},
     onEventClick: (Int) -> Unit = {},
     onAbrirNotificaciones: () -> Unit = {},
-    onVolverModeracion: () -> Unit = {},
     onSessionInvalid: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -98,16 +94,16 @@ fun HomeScreen(
         onCategoryChange = viewModel::onCategoryChange,
         onQueryChange = viewModel::onQueryChange,
         onAbrirNotificaciones = onAbrirNotificaciones,
-        onVolverModeracion = onVolverModeracion,
         onFavoriteClick = viewModel::onFavoriteClick,
         onAbrirMapa = onAbrirMapa,
-        onAbrirMisEventos = onAbrirMisEventos,
         onAbrirPerfil = onAbrirPerfil,
-        onCrearEvento = onCrearEvento,
         onEventClick = onEventClick,
         onRetry = { viewModel.loadUser(userId) },
-        onSessionInvalid = onSessionInvalid
+        onSessionInvalid = onSessionInvalid,
+        onChooseSearchLocation = viewModel::openLocationPicker,
+        onUseDeviceLocation = viewModel::useDeviceLocation
     )
+    if (state.showLocationPicker) LocationPickerDialog(state.searchLocation.coordinates, state.searchLocation.address, viewModel::closeLocationPicker, viewModel::selectSearchLocation)
 }
 
 @Composable
@@ -118,17 +114,15 @@ private fun HomeScreenContent(
     onCategoryChange: (EventCategory?) -> Unit,
     onQueryChange: (String) -> Unit,
     onAbrirNotificaciones: () -> Unit,
-    onVolverModeracion: () -> Unit,
     onFavoriteClick: (Int) -> Unit,
     onAbrirMapa: () -> Unit,
-    onAbrirMisEventos: () -> Unit,
     onAbrirPerfil: () -> Unit,
-    onCrearEvento: () -> Unit,
     onEventClick: (Int) -> Unit,
     onRetry: () -> Unit,
-    onSessionInvalid: () -> Unit
+    onSessionInvalid: () -> Unit,
+    onChooseSearchLocation: () -> Unit = {},
+    onUseDeviceLocation: () -> Unit = {}
 ) {
-    val azulPrincipal = MaterialTheme.colorScheme.primary
 
     when (val result = state.loadResult) {
         RequestResult.Loading -> {
@@ -153,60 +147,28 @@ private fun HomeScreenContent(
         RequestResult.Success -> Unit
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = Fondo,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = {
-            HomeBottomBar(
-                azulPrincipal = azulPrincipal,
-                onAbrirMapa = onAbrirMapa,
-                onAbrirMisEventos = onAbrirMisEventos,
-                onAbrirPerfil = onAbrirPerfil
-            )
-        },
-        floatingActionButton = {
-            if (state.canCreateEvent) {
-                ExtendedFloatingActionButton(
-                    onClick = onCrearEvento,
-                    modifier = Modifier.testTag("create_event_button"),
-                    icon = {
-                        Text(
-                            text = "+",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    },
-                    text = {
-                        Text(
-                            text = "Crear evento",
-                            fontSize = 12.sp
-                        )
-                    },
-                    containerColor = azulPrincipal,
-                    contentColor = Color.White
+    Column(Modifier.fillMaxSize().background(Fondo)) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                HomeContent(
+                    state = state,
+                    userName = state.userName,
+                    userInitials = state.userInitials,
+                    onSearchRadiusChange = onSearchRadiusChange,
+                    onFilterChange = onFilterChange,
+                    onCategoryChange = onCategoryChange,
+                    onQueryChange = onQueryChange,
+                    onAbrirNotificaciones = onAbrirNotificaciones,
+                    onFavoriteClick = onFavoriteClick,
+                    onAbrirMapa = onAbrirMapa,
+                    onAbrirPerfil = onAbrirPerfil,
+                    onEventClick = onEventClick,
+                    onChooseSearchLocation = onChooseSearchLocation,
+                    onUseDeviceLocation = onUseDeviceLocation
                 )
             }
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            HomeContent(
-                state = state,
-                userName = state.userName,
-                userInitials = state.userInitials,
-                onSearchRadiusChange = onSearchRadiusChange,
-                onFilterChange = onFilterChange,
-                onCategoryChange = onCategoryChange,
-                onQueryChange = onQueryChange,
-                onAbrirNotificaciones = onAbrirNotificaciones,
-                onVolverModeracion = onVolverModeracion,
-                onFavoriteClick = onFavoriteClick,
-                onAbrirMapa = onAbrirMapa,
-                onAbrirPerfil = onAbrirPerfil,
-                onEventClick = onEventClick
-            )
         }
     }
 }
@@ -221,11 +183,12 @@ private fun HomeContent(
     onCategoryChange: (EventCategory?) -> Unit,
     onQueryChange: (String) -> Unit,
     onAbrirNotificaciones: () -> Unit,
-    onVolverModeracion: () -> Unit,
     onFavoriteClick: (Int) -> Unit,
     onAbrirMapa: () -> Unit,
     onAbrirPerfil: () -> Unit,
-    onEventClick: (Int) -> Unit
+    onEventClick: (Int) -> Unit,
+    onChooseSearchLocation: () -> Unit = {},
+    onUseDeviceLocation: () -> Unit = {}
 ) {
     val azulPrincipal = MaterialTheme.colorScheme.primary
 
@@ -291,56 +254,7 @@ private fun HomeContent(
                 }
             }
 
-            item {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = "Tu dirección",
-                        fontSize = 11.sp,
-                        color = TextoSecundario
-                    )
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(6.dp),
-                        color = Color.White,
-                        border = androidx.compose.foundation.BorderStroke(
-                            width = 1.dp,
-                            color = Gris
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(
-                                horizontal = 12.dp,
-                                vertical = 10.dp
-                            ),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconoUbicacion(
-                                color = TextoSecundario,
-                                modifier = Modifier.size(17.dp)
-                            )
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            Text(
-                                text = state.address,
-                                fontSize = 12.sp,
-                                color = TextoPrincipal,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            IconoObjetivo(
-                                color = TextoSecundario,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                }
-            }
+            item { SearchLocationControls(state.searchLocation, onChooseSearchLocation, onUseDeviceLocation) }
 
             item {
                 Column(
@@ -379,9 +293,6 @@ private fun HomeContent(
             }
 
             state.syncError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
-            if (state.user?.role == UserRole.ADMINISTRATOR) {
-                item { TextButton(onClick = onVolverModeracion) { Text("Volver a moderación") } }
-            }
             item {
                 OutlinedTextField(
                     value = state.query, onValueChange = onQueryChange,
@@ -605,7 +516,7 @@ private fun EventCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     EventTag(
-                        text = "${formatDistance(event.distanceKm)} km",
+                        text = stringResource(R.string.event_distance_km, event.distanceKm),
                         background = Color(0xFFE4F0FF),
                         textColor = Color(0xFF255D8A)
                     )
@@ -665,161 +576,6 @@ private fun EventTag(
                 vertical = 2.dp
             )
         )
-    }
-}
-
-@Composable
-private fun HomeBottomBar(
-    azulPrincipal: Color,
-    onAbrirMapa: () -> Unit,
-    onAbrirMisEventos: () -> Unit,
-    onAbrirPerfil: () -> Unit
-) {
-    NavigationBar(
-        containerColor = Color.White
-    ) {
-        NavigationBarItem(
-            selected = true,
-            onClick = {},
-            icon = {
-                IconoNavegacionHome(
-                    tipo = "Inicio",
-                    selected = true,
-                    color = azulPrincipal
-                )
-            },
-            label = {
-                Text("Inicio", fontSize = 9.sp)
-            }
-        )
-
-        NavigationBarItem(
-            selected = false,
-            onClick = onAbrirMapa,
-            icon = {
-                IconoNavegacionHome(
-                    tipo = "Mapa",
-                    selected = false,
-                    color = TextoSecundario
-                )
-            },
-            label = {
-                Text("Mapa", fontSize = 9.sp)
-            }
-        )
-
-        NavigationBarItem(
-            selected = false,
-            onClick = onAbrirMisEventos,
-            icon = {
-                IconoNavegacionHome(
-                    tipo = "Mis eventos",
-                    selected = false,
-                    color = TextoSecundario
-                )
-            },
-            label = {
-                Text("Mis eventos", fontSize = 9.sp)
-            }
-        )
-
-        NavigationBarItem(
-            selected = false,
-            onClick = onAbrirPerfil,
-            icon = {
-                IconoNavegacionHome(
-                    tipo = "Perfil",
-                    selected = false,
-                    color = TextoSecundario
-                )
-            },
-            label = {
-                Text("Perfil", fontSize = 9.sp)
-            }
-        )
-    }
-}
-
-@Composable
-private fun IconoNavegacionHome(
-    tipo: String,
-    selected: Boolean,
-    color: Color
-) {
-    Canvas(
-        modifier = Modifier.size(20.dp)
-    ) {
-        val strokeWidth = if (selected) 1.8.dp.toPx() else 1.5.dp.toPx()
-
-        when (tipo) {
-            "Inicio" -> {
-                val house = Path().apply {
-                    moveTo(size.width * 0.12f, size.height * 0.48f)
-                    lineTo(size.width * 0.50f, size.height * 0.13f)
-                    lineTo(size.width * 0.88f, size.height * 0.48f)
-                    lineTo(size.width * 0.80f, size.height * 0.48f)
-                    lineTo(size.width * 0.80f, size.height * 0.88f)
-                    lineTo(size.width * 0.57f, size.height * 0.88f)
-                    lineTo(size.width * 0.57f, size.height * 0.64f)
-                    lineTo(size.width * 0.42f, size.height * 0.64f)
-                    lineTo(size.width * 0.42f, size.height * 0.88f)
-                    lineTo(size.width * 0.20f, size.height * 0.88f)
-                    lineTo(size.width * 0.20f, size.height * 0.48f)
-                    close()
-                }
-                drawPath(house, color, style = Stroke(width = strokeWidth))
-            }
-
-            "Mapa" -> {
-                val mapPath = Path().apply {
-                    moveTo(size.width * 0.10f, size.height * 0.22f)
-                    lineTo(size.width * 0.38f, size.height * 0.10f)
-                    lineTo(size.width * 0.65f, size.height * 0.22f)
-                    lineTo(size.width * 0.90f, size.height * 0.10f)
-                    lineTo(size.width * 0.90f, size.height * 0.78f)
-                    lineTo(size.width * 0.65f, size.height * 0.90f)
-                    lineTo(size.width * 0.38f, size.height * 0.78f)
-                    lineTo(size.width * 0.10f, size.height * 0.90f)
-                    close()
-                }
-                drawPath(mapPath, color, style = Stroke(width = strokeWidth))
-                drawLine(color, Offset(size.width * 0.38f, size.height * 0.10f), Offset(size.width * 0.38f, size.height * 0.78f), strokeWidth)
-                drawLine(color, Offset(size.width * 0.65f, size.height * 0.22f), Offset(size.width * 0.65f, size.height * 0.90f), strokeWidth)
-            }
-
-            "Mis eventos" -> {
-                drawRoundRect(
-                    color = color,
-                    topLeft = Offset(size.width * 0.18f, size.height * 0.16f),
-                    size = Size(size.width * 0.64f, size.height * 0.72f),
-                    cornerRadius = CornerRadius(2.dp.toPx()),
-                    style = Stroke(width = strokeWidth)
-                )
-                drawLine(color, Offset(size.width * 0.18f, size.height * 0.37f), Offset(size.width * 0.82f, size.height * 0.37f), strokeWidth)
-                drawLine(color, Offset(size.width * 0.34f, size.height * 0.08f), Offset(size.width * 0.34f, size.height * 0.26f), strokeWidth)
-                drawLine(color, Offset(size.width * 0.66f, size.height * 0.08f), Offset(size.width * 0.66f, size.height * 0.26f), strokeWidth)
-                drawCircle(color, 1.dp.toPx(), Offset(size.width * 0.36f, size.height * 0.54f))
-                drawCircle(color, 1.dp.toPx(), Offset(size.width * 0.60f, size.height * 0.54f))
-            }
-
-            else -> {
-                drawCircle(
-                    color = color,
-                    radius = size.width * 0.18f,
-                    center = Offset(size.width * 0.50f, size.height * 0.29f),
-                    style = Stroke(width = strokeWidth)
-                )
-                drawArc(
-                    color = color,
-                    startAngle = 180f,
-                    sweepAngle = 180f,
-                    useCenter = false,
-                    topLeft = Offset(size.width * 0.18f, size.height * 0.39f),
-                    size = Size(size.width * 0.64f, size.height * 0.50f),
-                    style = Stroke(width = strokeWidth)
-                )
-            }
-        }
     }
 }
 
@@ -1005,14 +761,6 @@ private fun IconoCorazon(
     }
 }
 
-private fun formatDistance(distanceKm: Double): String {
-    return if (distanceKm % 1.0 == 0.0) {
-        distanceKm.toInt().toString()
-    } else {
-        distanceKm.toString()
-    }
-}
-
 private fun formatPrice(price: Int): String {
     if (price == 0) return "Gratis"
 
@@ -1040,12 +788,9 @@ private fun HomeScreenPreview() {
             onCategoryChange = {},
             onQueryChange = {},
             onAbrirNotificaciones = {},
-            onVolverModeracion = {},
             onFavoriteClick = {},
             onAbrirMapa = {},
-            onAbrirMisEventos = {},
             onAbrirPerfil = {},
-            onCrearEvento = {},
             onEventClick = {},
             onRetry = {},
             onSessionInvalid = {}

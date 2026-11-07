@@ -9,6 +9,8 @@ import com.eventoscomunitarios.app.core.util.parseEventDateTime
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventCategory
 import com.eventoscomunitarios.app.domain.model.EventModerationStatus
+import com.eventoscomunitarios.app.domain.model.Coordinates
+import com.eventoscomunitarios.app.core.util.eventFormTime
 import com.eventoscomunitarios.app.domain.usecase.EventUseCases
 import com.eventoscomunitarios.app.domain.usecase.UserUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
 
 data class CreateEventUiState(
     val userId: String = "",
@@ -27,10 +30,15 @@ data class CreateEventUiState(
     val endDate: String = "",
     val endTime: String = "",
     val address: String = "",
+    val coordinates: Coordinates? = null,
+    val showLocationPicker: Boolean = false,
+    val sourceEventId: Int? = null,
+    val sourceReady: Boolean = true,
     val description: String = "",
     val capacity: String = "",
     val price: String = "",
     val isFree: Boolean = true,
+    val isOutdoor: Boolean = false,
     val photoUri: String? = null,
     val titleError: String? = null,
     val categoryError: String? = null,
@@ -47,7 +55,7 @@ data class CreateEventUiState(
     val isFormValid: Boolean
         get() = title.isNotBlank() && category.isNotBlank() && date.isNotBlank() &&
             time.isNotBlank() && endDate.isNotBlank() && endTime.isNotBlank() &&
-            address.isNotBlank() && description.isNotBlank() && capacity.isNotBlank() &&
+            sourceReady && coordinates?.isValid == true && address.isNotBlank() && description.isNotBlank() && capacity.isNotBlank() &&
             listOf(titleError, categoryError, dateError, timeError, endDateError, endTimeError,
                 addressError, descriptionError, capacityError, priceError).all { it == null }
 }
@@ -59,8 +67,31 @@ class CreateEventViewModel @Inject constructor(
     private val users: UserUseCases
 ) : ViewModel() {
     private val userId: String = savedStateHandle["userId"] ?: ""
-    private val _uiState = MutableStateFlow(CreateEventUiState(userId = userId))
+    private val sourceEventId: Int? = savedStateHandle["sourceEventId"]
+    private val _uiState = MutableStateFlow(CreateEventUiState(userId = userId, sourceEventId = sourceEventId, sourceReady = sourceEventId == null))
     val uiState: StateFlow<CreateEventUiState> = _uiState.asStateFlow()
+
+    init {
+        if (sourceEventId != null) viewModelScope.launch {
+            combine(events.events, events.syncState) { _, sync -> sync }.collect { sync ->
+                if (_uiState.value.sourceReady || sync.isLoading) return@collect
+                val source = events.findEvent(sourceEventId)
+                if (source == null || !events.canRelaunch(userId, source)) {
+                    update { copy(publishResult = RequestResult.Failure(sync.error ?: "No puedes volver a lanzar este evento")) }
+                } else update { copy(sourceReady = true, title = source.title, category = source.category.displayName,
+                    time = eventFormTime(source.startsAt), endTime = eventFormTime(source.endsAt),
+                    address = source.location, coordinates = source.coordinates, description = source.description,
+                    capacity = source.capacity.toString(), isFree = source.isFree, price = if (source.isFree) "" else source.price.toString(),
+                    photoUri = source.photoUri, isOutdoor = source.isOutdoor, publishResult = null) }
+            }
+        }
+    }
+
+    fun openLocationPicker() = editForm { copy(showLocationPicker = true) }
+    fun closeLocationPicker() = update { copy(showLocationPicker = false) }
+    fun onLocationSelected(point: Coordinates, address: String) = editForm {
+        copy(coordinates = point.takeIf { it.isValid }, address = address.trim(), addressError = null, showLocationPicker = false, publishResult = null)
+    }
 
     fun onTitleChange(value: String) = editForm { copy(title = value, titleError = null, publishResult = null) }
     fun onCategoryChange(value: String) = editForm { copy(category = value, categoryError = null, publishResult = null) }
@@ -68,7 +99,7 @@ class CreateEventViewModel @Inject constructor(
     fun onTimeChange(value: String) = editForm { copy(time = value, timeError = null, publishResult = null) }
     fun onEndDateChange(value: String) = editForm { copy(endDate = value, endDateError = null, publishResult = null) }
     fun onEndTimeChange(value: String) = editForm { copy(endTime = value, endTimeError = null, publishResult = null) }
-    fun onAddressChange(value: String) = editForm { copy(address = value, addressError = null, publishResult = null) }
+    fun onAddressChange(value: String) = editForm { copy(address = value, coordinates = null, addressError = null, publishResult = null) }
     fun onDescriptionChange(value: String) = editForm { copy(description = value, descriptionError = null, publishResult = null) }
     fun onCapacityChange(value: String) = editForm { copy(capacity = value.filter(Char::isDigit), capacityError = null, publishResult = null) }
     fun onPriceChange(value: String) = editForm { copy(price = value.filter(Char::isDigit), priceError = null, publishResult = null) }
@@ -76,6 +107,7 @@ class CreateEventViewModel @Inject constructor(
     fun onFreeChange(value: Boolean) = editForm {
         copy(isFree = value, price = if (value) "" else price, priceError = null, publishResult = null)
     }
+    fun onOutdoorChange(value: Boolean) = editForm { copy(isOutdoor = value, publishResult = null) }
 
     fun publishEvent() {
         if (_uiState.value.publishResult == RequestResult.Loading || _uiState.value.publishResult == RequestResult.Success) return
@@ -96,10 +128,12 @@ class CreateEventViewModel @Inject constructor(
             price = if (state.isFree) 0 else state.price.toInt(), category = parseCategory(state.category)!!,
             attendeeCount = 0, description = state.description.trim(), capacity = state.capacity.toInt(),
             organizerId = author.id, organizerName = author.name, photoUri = state.photoUri,
+            latitude = state.coordinates!!.latitude, longitude = state.coordinates.longitude, locationConfirmed = true,
+            isOutdoor = state.isOutdoor,
             moderationStatus = EventModerationStatus.PENDING, submittedAtLabel = "ahora"
         )
         viewModelScope.launch {
-        events.create(userId, event).fold(
+        (if (sourceEventId == null) events.create(userId, event) else events.relaunch(userId, sourceEventId, event)).fold(
             onSuccess = { update { copy(publishResult = RequestResult.Success) } },
             onFailure = { error -> update { copy(publishResult = RequestResult.Failure(error.message ?: "No se pudo publicar el evento")) } }
         )
@@ -128,7 +162,7 @@ class CreateEventViewModel @Inject constructor(
                     else -> null
                 },
                 endTimeError = if (endTime.isBlank()) "Selecciona la hora de fin" else null,
-                addressError = if (address.isBlank()) "La dirección es obligatoria" else null,
+                addressError = if (coordinates?.isValid != true || address.isBlank()) "Elige y confirma la ubicación en el mapa" else null,
                 descriptionError = if (description.isBlank()) "Describe la actividad" else null,
                 capacityError = if ((capacity.toIntOrNull() ?: 0) <= 0) "Ingresa un cupo válido" else null,
                 priceError = if (!isFree && (price.toIntOrNull() ?: 0) <= 0) "Ingresa un precio mayor que cero" else null
@@ -143,7 +177,7 @@ class CreateEventViewModel @Inject constructor(
     /** Un callback del teclado o selector no puede habilitar otro envío mientras se guarda. */
     private inline fun editForm(transform: CreateEventUiState.() -> CreateEventUiState) {
         _uiState.update { state ->
-            if (state.publishResult == RequestResult.Loading || state.publishResult == RequestResult.Success) state
+            if (!state.sourceReady || state.publishResult == RequestResult.Loading || state.publishResult == RequestResult.Success) state
             else state.transform()
         }
     }

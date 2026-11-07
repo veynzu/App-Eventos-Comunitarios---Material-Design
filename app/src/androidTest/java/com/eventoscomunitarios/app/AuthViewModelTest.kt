@@ -87,7 +87,7 @@ class AuthViewModelTest {
     }
 
     @Test fun homeLoadsExistingUserAndRejectsMissingUser() = onMain {
-        val home = HomeViewModel(data.events, data.users, data.community)
+        val home = HomeViewModel(data.events, data.users, data.community, data.locations)
         home.loadUser("participant-ana")
         assertEquals(RequestResult.Success, home.uiState.value.loadResult)
         assertTrue(home.uiState.value.canCreateEvent)

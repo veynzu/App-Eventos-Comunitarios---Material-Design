@@ -64,17 +64,246 @@ service cloud.firestore {
       allow delete: if isSelf(uid);
     }
 
-    // Acceso de lectura para los listeners actuales. No autoriza escrituras.
-    match /{collection}/{documentId} {
-      allow read: if signedIn()
-        && collection in ['events', 'comments', 'votes', 'favorites', 'following'];
+    function active() {
+      return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'ACTIVE';
+    }
+
+    function eventData(id) {
+      return get(/databases/$(database)/documents/events/$(string(id))).data;
+    }
+
+    function managesEvent(id) {
+      return id is int && (isModerator() || eventData(id).organizerId == request.auth.uid);
+    }
+
+    function published(event) {
+      return event.moderationStatus == 'APPROVED' && event.isDeleted == false;
+    }
+
+    function ended(event) {
+      return event.isFinished || event.endsAt <= request.time.toMillis();
+    }
+
+    function pairKey(uid, other) {
+      return hashing.sha256(string(uid.size()) + ':' + uid + string(other.size()) + ':' + other).toHexString().lower();
+    }
+
+    function validEvent(data) {
+      return data.keys().hasOnly([
+          'id', 'title', 'startsAt', 'endsAt', 'location', 'distanceKm', 'price', 'category', 'attendeeCount',
+          'description', 'capacity', 'organizerId', 'organizerName', 'photoUri', 'moderationStatus',
+          'submittedAtLabel', 'submittedByName', 'latitude', 'longitude', 'isFinished', 'rejectionReason',
+          'isDeleted', 'revision', 'registrationUserIds', 'registrations', 'locationConfirmed', 'seriesId',
+          'previousEventId', 'lastActorId', 'promotedUserId', 'isOutdoor'
+        ])
+        && data.id is int && data.id > 0 && data.seriesId is int && data.seriesId > 0
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.description is string && data.description.size() > 0 && data.description.size() <= 5000
+        && data.location is string && data.location.size() > 0 && data.location.size() <= 250
+        && data.startsAt is int && data.endsAt is int && data.endsAt > data.startsAt
+        && data.latitude is number && data.latitude >= -90 && data.latitude <= 90
+        && data.longitude is number && data.longitude >= -180 && data.longitude <= 180
+        && data.locationConfirmed is bool
+        && data.get('isOutdoor', false) is bool
+        && data.capacity is int && data.capacity > 0 && data.price is int && data.price >= 0
+        && data.attendeeCount is int && data.attendeeCount >= 0 && data.attendeeCount <= data.capacity
+        && data.category in ['SPORTS', 'CULTURE', 'COMMUNITY', 'EDUCATION', 'ENVIRONMENT', 'HEALTH', 'TECHNOLOGY']
+        && data.registrations is map && data.registrationUserIds is list
+        && data.registrationUserIds.toSet() == data.registrations.keys().toSet()
+        && data.lastActorId == request.auth.uid;
+    }
+
+    function validPreviousEdition(data) {
+      let previous = eventData(data.previousEventId);
+      return previous.organizerId == request.auth.uid && published(previous) && ended(previous)
+        && data.seriesId == previous.get('seriesId', previous.id);
+    }
+
+    function enrollmentChange() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let uid = request.auth.uid;
+      let promotion = after.promotedUserId;
+      let changes = after.registrations.diff(before.registrations).affectedKeys();
+      return after.diff(before).affectedKeys().hasOnly([
+          'registrations', 'registrationUserIds', 'attendeeCount', 'revision', 'lastActorId', 'promotedUserId',
+          'seriesId', 'previousEventId', 'locationConfirmed', 'isOutdoor'
+        ])
+        && after.locationConfirmed == before.get('locationConfirmed', false)
+        && after.get('isOutdoor', false) == before.get('isOutdoor', false)
+        && ( // Repetir una inscripción no agrega participantes ni modifica cupos.
+          (uid in before.registrations && after.registrations == before.registrations && after.attendeeCount == before.attendeeCount)
+          || ( // Cada persona solo puede agregar su propia inscripción, antes del inicio.
+            published(before) && !before.isFinished && before.startsAt > request.time.toMillis()
+            && before.organizerId != uid && !(uid in before.registrations) && uid in after.registrations
+            && changes.hasOnly([uid]) && after.registrations.keys().toSet() == before.registrations.keys().toSet().union([uid].toSet())
+            && after.registrations[uid].keys().hasOnly(['status', 'registeredAt', 'queueOrder'])
+            && after.registrations[uid].registeredAt is int && after.registrations[uid].queueOrder is int
+            && after.registrations[uid].queueOrder > 0 && promotion == null
+            && ((before.attendeeCount < before.capacity && after.registrations[uid].status == 'CONFIRMED' && after.attendeeCount == before.attendeeCount + 1)
+              || (before.attendeeCount == before.capacity && after.registrations[uid].status == 'WAITLIST' && after.attendeeCount == before.attendeeCount))
+          ) || ( // Cancelar o eliminar la cuenta solo retira la inscripción propia.
+            uid in before.registrations && !(uid in after.registrations)
+            && after.registrations.keys().toSet() == before.registrations.keys().toSet().difference([uid].toSet())
+            && ((promotion == null && changes.hasOnly([uid])
+                && after.attendeeCount == before.attendeeCount - (before.registrations[uid].status == 'CONFIRMED' ? 1 : 0))
+              || (promotion is string && published(before) && !ended(before) && before.startsAt > request.time.toMillis()
+                && before.registrations[uid].status == 'CONFIRMED'
+                && promotion in before.registrations && promotion in after.registrations
+                && before.registrations[promotion].status == 'WAITLIST' && after.registrations[promotion].status == 'CONFIRMED'
+                && after.registrations[promotion].diff(before.registrations[promotion]).affectedKeys().hasOnly(['status'])
+                && get(/databases/$(database)/documents/users/$(promotion)).data.accountStatus == 'ACTIVE'
+                && changes.hasOnly([uid, promotion]) && after.attendeeCount == before.attendeeCount))
+          )
+        );
+    }
+
+    match /events/{eventId} {
+      // Los listeners actuales consultan la colección completa y filtran en la UI.
+      allow read: if signedIn();
+      allow create: if active() && validEvent(request.resource.data)
+        && eventId == string(request.resource.data.id)
+        && request.resource.data.organizerId == request.auth.uid
+        && request.resource.data.organizerName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
+        && request.resource.data.moderationStatus == 'PENDING' && request.resource.data.rejectionReason == null
+        && request.resource.data.locationConfirmed && request.resource.data.startsAt > request.time.toMillis()
+        && !request.resource.data.isDeleted && !request.resource.data.isFinished
+        && request.resource.data.attendeeCount == 0 && request.resource.data.registrations.size() == 0
+        && request.resource.data.revision == 1
+        && (request.resource.data.previousEventId == null ? request.resource.data.seriesId == request.resource.data.id : validPreviousEdition(request.resource.data));
+
+      allow update: if active() && validEvent(request.resource.data)
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.organizerId == resource.data.organizerId
+        && request.resource.data.seriesId == resource.data.get('seriesId', resource.data.id)
+        && request.resource.data.previousEventId == resource.data.get('previousEventId', null)
+        && request.resource.data.revision == resource.data.get('revision', 0) + 1
+        && !resource.data.isDeleted
+        && (
+          (isModerator() && resource.data.moderationStatus == 'PENDING'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'moderationStatus', 'rejectionReason', 'registrations', 'registrationUserIds', 'attendeeCount', 'revision', 'lastActorId', 'promotedUserId', 'seriesId', 'previousEventId', 'locationConfirmed', 'isOutdoor'
+            ])
+            && (request.resource.data.moderationStatus == 'APPROVED'
+              ? (request.resource.data.locationConfirmed && !resource.data.isFinished && resource.data.startsAt > request.time.toMillis())
+              : (request.resource.data.moderationStatus == 'REJECTED' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.size() > 0)))
+          || ((resource.data.organizerId == request.auth.uid || isModerator()) && (
+            (request.resource.data.isDeleted && request.resource.data.attendeeCount == 0 && request.resource.data.registrations.size() == 0
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'isDeleted', 'attendeeCount', 'registrations', 'registrationUserIds', 'revision', 'lastActorId', 'promotedUserId', 'seriesId', 'previousEventId', 'locationConfirmed', 'isOutdoor'
+              ]))
+            || (!resource.data.isFinished && resource.data.startsAt > request.time.toMillis()
+              && request.resource.data.locationConfirmed && request.resource.data.startsAt > request.time.toMillis()
+              && request.resource.data.moderationStatus == 'PENDING' && request.resource.data.rejectionReason == null
+              && request.resource.data.registrations == resource.data.registrations
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'title', 'description', 'location', 'latitude', 'longitude', 'locationConfirmed', 'category', 'startsAt', 'endsAt',
+                'capacity', 'price', 'photoUri', 'moderationStatus', 'rejectionReason', 'submittedAtLabel', 'revision', 'lastActorId', 'promotedUserId', 'seriesId', 'previousEventId', 'isOutdoor'
+              ]))
+            || (published(resource.data) && !resource.data.isFinished && resource.data.startsAt <= request.time.toMillis()
+              && request.resource.data.isFinished && request.resource.data.attendeeCount == resource.data.attendeeCount
+              && request.resource.data.registrations.diff(resource.data.registrations).addedKeys().size() == 0
+              && request.resource.data.registrations.diff(resource.data.registrations).changedKeys().size() == 0
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'isFinished', 'registrations', 'registrationUserIds', 'attendeeCount', 'revision', 'lastActorId', 'promotedUserId', 'seriesId', 'previousEventId', 'locationConfirmed', 'isOutdoor'
+              ]))
+          ))
+          || enrollmentChange()
+        );
+      allow delete: if active() && resource.data.isDeleted && managesEvent(resource.data.id);
+    }
+
+    function mayReview(eventId) {
+      let event = eventData(eventId);
+      return published(event) && ended(event) && request.auth.uid in event.registrations
+        && event.registrations[request.auth.uid].status == 'CONFIRMED';
+    }
+
+    match /comments/{commentId} {
+      allow read: if signedIn();
+      allow create, update: if active() && request.resource.data.keys().hasOnly(['id', 'eventId', 'userId', 'authorName', 'text', 'createdAt'])
+        && commentId == string(request.resource.data.id) && request.resource.data.id is int && request.resource.data.id > 0
+        && request.resource.data.userId == request.auth.uid && mayReview(request.resource.data.eventId)
+        && request.resource.data.authorName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
+        && request.resource.data.text is string && request.resource.data.text.trim().size() > 0 && request.resource.data.text.size() <= 1000
+        && request.resource.data.createdAt is int
+        && (resource == null || (resource.data.userId == request.auth.uid && resource.data.eventId == request.resource.data.eventId
+          && resource.data.createdAt == request.resource.data.createdAt));
+      allow delete: if active() && (resource.data.userId == request.auth.uid || managesEvent(resource.data.eventId));
+    }
+
+    match /favorites/{favoriteId} {
+      allow read: if signedIn();
+      allow create: if active() && request.resource.data.keys().hasOnly(['userId', 'eventId', 'sourceEventId', 'organizerId'])
+        && request.resource.data.userId == request.auth.uid && request.resource.data.eventId is int
+        && favoriteId == pairKey(request.auth.uid, string(request.resource.data.eventId))
+        && published(eventData(request.resource.data.sourceEventId))
+        && request.resource.data.eventId == eventData(request.resource.data.sourceEventId).get('seriesId', request.resource.data.sourceEventId)
+        && request.resource.data.organizerId == eventData(request.resource.data.sourceEventId).organizerId;
+      allow update: if active() && managesEvent(resource.data.eventId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['organizerId'])
+        && request.resource.data.organizerId == eventData(resource.data.eventId).organizerId;
+      allow delete: if active() && (resource.data.userId == request.auth.uid || isModerator()
+        || resource.data.get('organizerId', '') == request.auth.uid || managesEvent(resource.data.eventId));
+    }
+
+    match /votes/{voteId} {
+      allow read: if signedIn();
+      allow create, update: if active() && request.resource.data.keys().hasOnly(['userId', 'eventId', 'value'])
+        && request.resource.data.userId == request.auth.uid && request.resource.data.eventId is int
+        && voteId == pairKey(request.auth.uid, string(request.resource.data.eventId)) && request.resource.data.value in [-1, 1]
+        && published(eventData(request.resource.data.eventId)) && eventData(request.resource.data.eventId).organizerId != request.auth.uid
+        && (resource == null || (resource.data.userId == request.auth.uid && resource.data.eventId == request.resource.data.eventId));
+      allow delete: if active() && (resource.data.userId == request.auth.uid || managesEvent(resource.data.eventId));
+    }
+
+    match /following/{followId} {
+      allow read: if signedIn();
+      allow create: if active() && request.resource.data.keys().hasOnly(['userId', 'organizerId'])
+        && request.resource.data.userId == request.auth.uid && request.resource.data.organizerId != request.auth.uid
+        && followId == pairKey(request.auth.uid, request.resource.data.organizerId)
+        && get(/databases/$(database)/documents/users/$(request.resource.data.organizerId)).data.accountStatus == 'ACTIVE';
+      allow delete: if active() && (resource.data.userId == request.auth.uid || resource.data.organizerId == request.auth.uid);
     }
 
     match /notifications/{notificationId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || managesEvent(resource.data.get('eventId', null)));
+      allow create: if active() && request.resource.data.keys().hasOnly([
+          'id', 'userId', 'title', 'message', 'eventId', 'createdAt', 'isRead', 'contextEventId', 'senderId'
+        ]) && notificationId == string(request.resource.data.id) && request.resource.data.id is int
+        && request.resource.data.senderId == request.auth.uid && request.resource.data.isRead == false
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 200
+        && request.resource.data.message is string && request.resource.data.message.size() <= 5000 && request.resource.data.createdAt is int
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.userId))
+        && (request.resource.data.eventId == null || (request.resource.data.eventId == request.resource.data.contextEventId && !eventData(request.resource.data.eventId).isDeleted))
+        && (request.resource.data.userId == request.auth.uid || isModerator() || managesEvent(request.resource.data.contextEventId)
+          || (request.resource.data.contextEventId is int && (
+            eventData(request.resource.data.contextEventId).organizerId == request.resource.data.userId
+            || (eventData(request.resource.data.contextEventId).lastActorId == request.auth.uid
+              && request.resource.data.userId in eventData(request.resource.data.contextEventId).registrations
+              && eventData(request.resource.data.contextEventId).registrations[request.resource.data.userId].status == 'CONFIRMED'))));
+      allow update: if active() && (
+        (resource.data.userId == request.auth.uid && request.resource.data.isRead == true
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']))
+        || (managesEvent(resource.data.get('eventId', null)) && request.resource.data.eventId == null
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['eventId']))
+      );
+      allow delete: if active() && resource.data.userId == request.auth.uid;
     }
 
-    // Las demás rutas y escrituras permanecen denegadas por defecto.
-    // Eventos, inscripciones, contadores e interacciones necesitan reglas propias.
+    function increments(field) {
+      let before = resource == null ? 0 : resource.data.get(field, 0);
+      let after = request.resource.data.get(field, 0);
+      return after is int && after == before + 1 && after <= 2147483647
+        && (resource == null ? request.resource.data.keys().hasOnly([field]) : request.resource.data.diff(resource.data).affectedKeys().hasOnly([field]));
+    }
+
+    match /metadata/counters {
+      allow get: if active();
+      allow create, update: if active() && request.resource.data.keys().hasOnly(['events', 'comments', 'notifications'])
+        && (increments('events') || increments('comments') || increments('notifications'));
+    }
+
+    // Rutas desconocidas y operaciones no contempladas permanecen denegadas.
   }
 }

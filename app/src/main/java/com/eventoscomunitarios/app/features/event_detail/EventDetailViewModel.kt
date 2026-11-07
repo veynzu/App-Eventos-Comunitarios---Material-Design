@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 data class EventDetailUiState(
     val event: Event? = null,
@@ -47,6 +49,7 @@ data class EventDetailUiState(
     val commentText: String = "",
     val commentError: String? = null,
     val canComment: Boolean = false,
+    val canRelaunch: Boolean = false,
     val canVote: Boolean = false,
     val myVote: Int = 0,
     val positiveVotes: Int = 0,
@@ -70,6 +73,7 @@ class EventDetailViewModel @Inject constructor(
 
     init {
         refresh()
+        viewModelScope.launch { while (isActive) { delay(30_000); refresh() } }
         viewModelScope.launch {
             merge(
                 events.events.map { Unit }, events.registrations.map { Unit },
@@ -196,7 +200,7 @@ class EventDetailViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 event = event, isLoading = false, error = null, syncError = syncError,
-                isFavorite = community.favorites.value.any { favorite -> favorite.userId == userId && favorite.eventId == event.id },
+                isFavorite = community.favorites.value.any { favorite -> favorite.userId == userId && favorite.eventId == event.seriesId },
                 canFavorite = canInteract,
                 isFollowing = community.following.value.any { follow -> follow.userId == userId && follow.organizerId == event.organizerId },
                 canFollow = user.id != event.organizerId,
@@ -208,7 +212,8 @@ class EventDetailViewModel @Inject constructor(
                 comments = community.comments.value.filter { comment -> comment.eventId == event.id }
                     .sortedWith(compareBy<EventComment> { comment -> comment.createdAt }.thenBy { comment -> comment.id })
                     .map { comment -> comment.copy(authorName = users.findUser(comment.userId)?.name ?: comment.authorName) },
-                canComment = canInteract,
+                canComment = community.canComment(userId, event.id),
+                canRelaunch = events.canRelaunch(userId, event),
                 canVote = canInteract && user.id != event.organizerId,
                 myVote = eventVotes.firstOrNull { vote -> vote.userId == userId }?.value ?: 0,
                 positiveVotes = eventVotes.count { vote -> vote.value > 0 },

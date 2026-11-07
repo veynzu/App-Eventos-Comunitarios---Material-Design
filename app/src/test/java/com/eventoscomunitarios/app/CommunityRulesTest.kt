@@ -47,6 +47,12 @@ class CommunityRulesTest {
         return events.findEvent(created.id)!!
     }
 
+    private suspend fun participated(userId: String, eventId: Int = 1) {
+        if (events.registrations.value.none { it.userId == userId && it.eventId == eventId }) events.register(userId, eventId).getOrThrow()
+        val event = events.findEvent(eventId)!!
+        eventsRepository.save(event.copy(startsAt = System.currentTimeMillis() - 7200000, endsAt = System.currentTimeMillis() - 1000, isFinished = true))
+    }
+
     @Test fun creationUsesCurrentAuthorAndAlwaysRequiresModeration() = runBlocking {
         val created = events.create(ana, draft()).getOrThrow()
         assertEquals(ana, created.organizerId)
@@ -141,6 +147,7 @@ class CommunityRulesTest {
     }
 
     @Test fun commentsHaveRealAuthorAndCanBeRemovedByAuthorOrModerator() = runBlocking {
+        participated(ana)
         val comment = community.addComment(ana, 1, "  ¡Nos vemos!  ").getOrThrow()
         assertEquals("¡Nos vemos!", comment.text)
         assertEquals(users.findUser(ana)?.name, comment.authorName)
@@ -152,6 +159,7 @@ class CommunityRulesTest {
     }
 
     @Test fun aFailedNotificationDoesNotTurnASavedCommentIntoAFailedPublication() = runBlocking {
+        participated(ana)
         val failingNotices = object : CommunityRepository by communityRepository {
             override suspend fun notify(userId: String, title: String, message: String, eventId: Int?) {
                 throw IllegalStateException("No se pudo entregar el aviso")
@@ -163,6 +171,7 @@ class CommunityRulesTest {
     }
 
     @Test fun coroutineCancellationIsNotSwallowedBySecondaryNotificationHandling() = runBlocking {
+        participated(ana)
         val cancelledNotices = object : CommunityRepository by communityRepository {
             override suspend fun notify(userId: String, title: String, message: String, eventId: Int?) {
                 throw CancellationException("Pantalla cerrada")
@@ -194,6 +203,7 @@ class CommunityRulesTest {
 
     @Test fun deletingAccountRemovesRelatedDataAndPromotesWaitlist() = runBlocking {
         val own = published(laura)
+        participated(laura)
         community.addComment(laura, 1, "Comentario").getOrThrow()
         community.vote(laura, 1, 1).getOrThrow()
         community.toggleFavorite(laura, 1).getOrThrow()
@@ -215,10 +225,10 @@ class CommunityRulesTest {
 
     @Test fun deletingPublicationCleansInteractionsAndKeepsNotificationsWithoutBrokenLinks() = runBlocking {
         val event = published()
-        community.addComment(ana, event.id, "Voy a participar").getOrThrow()
+        participated(ana, event.id)
+        community.addComment(ana, event.id, "Me gustó participar").getOrThrow()
         community.vote(ana, event.id, 1).getOrThrow()
         community.toggleFavorite(ana, event.id).getOrThrow()
-        events.register(ana, event.id).getOrThrow()
         assertTrue(events.delete(ana, event.id).isFailure)
         events.delete(admin, event.id).getOrThrow()
         assertNull(events.findEvent(event.id))

@@ -6,9 +6,14 @@ import com.eventoscomunitarios.app.core.data.InMemoryUserRepository
 import com.eventoscomunitarios.app.domain.usecase.CommunityUseCases
 import com.eventoscomunitarios.app.domain.usecase.EventUseCases
 import com.eventoscomunitarios.app.domain.usecase.UserUseCases
+import com.eventoscomunitarios.app.domain.usecase.LocationUseCases
+import com.eventoscomunitarios.app.core.data.InMemoryLocationRepository
+import com.eventoscomunitarios.app.domain.model.Coordinates
 
 /** Cada prueba recibe datos aislados: no modifica el estado de otra prueba ni el de la app. */
 class TestDependencies {
+    val locationRepository = InMemoryLocationRepository(Coordinates.ARMENIA, "Armenia, Quindío")
+    val locations = LocationUseCases(locationRepository)
     val eventRepository = InMemoryEventRepository()
     val userRepository = InMemoryUserRepository()
     val communityRepository = InMemoryCommunityRepository()

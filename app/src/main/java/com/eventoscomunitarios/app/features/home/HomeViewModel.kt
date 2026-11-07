@@ -13,6 +13,9 @@ import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.domain.usecase.CommunityUseCases
 import com.eventoscomunitarios.app.domain.usecase.EventUseCases
 import com.eventoscomunitarios.app.domain.usecase.UserUseCases
+import com.eventoscomunitarios.app.domain.usecase.LocationUseCases
+import com.eventoscomunitarios.app.domain.model.Coordinates
+import com.eventoscomunitarios.app.domain.model.SearchLocation
 import com.eventoscomunitarios.app.features.auth.validationErrors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +38,8 @@ data class HomeUiState(
     val userErrors: Map<String, String> = emptyMap(),
     val loadResult: RequestResult = RequestResult.Loading,
     val address: String = "Armenia, Quindío",
+    val searchLocation: SearchLocation = SearchLocation(),
+    val showLocationPicker: Boolean = false,
     val searchRadiusKm: Float = 5f,
     val selectedFilter: HomeFilter = HomeFilter.ALL,
     val selectedCategory: EventCategory? = null,
@@ -58,7 +63,7 @@ data class HomeUiState(
             }
             val todayStart = today.timeInMillis
             val tomorrow = (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }.timeInMillis
-            return events.filter { event ->
+            return events.map { event -> event.copy(distanceKm = event.coordinates?.distanceKmTo(searchLocation.coordinates) ?: Double.POSITIVE_INFINITY) }.filter { event ->
                 event.moderationStatus == EventModerationStatus.APPROVED &&
                     event.distanceKm <= searchRadiusKm &&
                     (selectedCategory == null || event.category == selectedCategory) &&
@@ -77,13 +82,15 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val events: EventUseCases,
     private val users: UserUseCases,
-    private val community: CommunityUseCases
+    private val community: CommunityUseCases,
+    private val locations: LocationUseCases
 ) : ViewModel() {
     private var currentUserId: String? = null
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch { locations.search.collect { point -> _uiState.update { it.copy(searchLocation = point, address = point.address) } } }
         viewModelScope.launch {
             merge(events.events.map { Unit }, events.registrations.map { Unit }, users.users.map { Unit },
                 community.favorites.map { Unit }, community.notifications.map { Unit }, events.syncState.map { Unit },
@@ -93,6 +100,7 @@ class HomeViewModel @Inject constructor(
 
     fun loadUser(userId: String) {
         currentUserId = userId
+        viewModelScope.launch { locations.initialize(userId) }
         refresh()
     }
 
@@ -115,8 +123,8 @@ class HomeViewModel @Inject constructor(
                 },
                 syncError = events.syncState.value.error ?: users.syncState.value.error ?: community.syncState.value.error,
                 canCreateEvent = events.canPublish(userId),
-                favoriteEventIds = community.favorites.value.filter { favorite -> favorite.userId == userId }
-                    .mapTo(mutableSetOf()) { favorite -> favorite.eventId },
+                favoriteEventIds = events.events.value.filter { event -> community.favorites.value.any { it.userId == userId && it.eventId == event.seriesId } }
+                    .mapTo(mutableSetOf()) { event -> event.id },
                 unreadNotifications = community.notifications.value.count { notification -> notification.userId == userId && !notification.isRead },
                 confirmedEventIds = events.registrations.value.filter { registration ->
                     registration.userId == userId && registration.status == EventRegistrationStatus.CONFIRMED
@@ -127,6 +135,10 @@ class HomeViewModel @Inject constructor(
     }
 
     fun onSearchRadiusChange(value: Float) = _uiState.update { it.copy(searchRadiusKm = value) }
+    fun openLocationPicker() = _uiState.update { it.copy(showLocationPicker = true) }
+    fun closeLocationPicker() = _uiState.update { it.copy(showLocationPicker = false) }
+    fun selectSearchLocation(point: Coordinates, address: String) { locations.select(point, address, currentUserId); closeLocationPicker() }
+    fun useDeviceLocation() { viewModelScope.launch { locations.useDeviceLocation() } }
     fun onFilterChange(value: HomeFilter) = _uiState.update { it.copy(selectedFilter = value) }
     fun onCategoryChange(value: EventCategory?) = _uiState.update { it.copy(selectedCategory = value) }
     fun onQueryChange(value: String) = _uiState.update { it.copy(query = value.take(100)) }

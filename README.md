@@ -2,6 +2,10 @@
 
 Aplicación académica de eventos comunitarios. Conserva Kotlin, Compose, Material 3, MVVM con `UiState`/`StateFlow`, rutas `@Serializable`, casos de uso, interfaces de repositorio e inyección con Hilt.
 
+La navegación sigue la [guía 11 del profesor](https://caflorezvi.github.io/guias-apps-moviles/11.navegacion-2.html): `navigation/AppNavigation.kt` contiene el acceso público y la entrada al dashboard. `features/dashboard/MainScreen.kt` mantiene un único `Scaffold`, la barra inferior y los mensajes compartidos; `features/dashboard/navigation/DashboardNavigation.kt` contiene su `NavHost` interno. Las pantallas conservan sus features y ViewModels, y usan contenedores de contenido sin repetir el `Scaffold` del dashboard. El selector de ubicación es un diálogo de pantalla completa independiente.
+
+Inicio, Mapa, Mis eventos y Perfil mantienen los mismos accesos y el elemento seleccionado. Los administradores tienen además **Admin**, disponible también desde crear/editar y explorar eventos para volver al panel. Panel, Moderación y Usuarios son pestañas internas del área administrativa. Cambiar de sección conserva su estado sin apilar copias; crear/editar eventos, el detalle y las notificaciones se cierran al elegir otra sección. Cerrar sesión elimina la navegación autenticada.
+
 ## Arquitectura y servicios activos
 
 `Screen → ViewModel → UseCases → Repository (interfaz) → Firebase`
@@ -24,11 +28,11 @@ En la consola deben estar disponibles:
 2. Firestore en la base predeterminada `(default)`.
 3. El bucket `share-you-6a706.firebasestorage.app` de Storage; el servicio requiere el plan Blaze.
 
-`firestore.rules` contiene reglas iniciales para ingreso, registro, edición del perfil propio, suspensión por moderadores y lectura de las colecciones que consulta la app. Para aplicarlas, abrir **Firebase Console → Firestore Database → Reglas**, reemplazar el contenido con el archivo completo y pulsar **Publicar**. Guardar el archivo local o compilar la APK no publica las reglas. No se han desplegado cambios desde este repositorio.
+`firestore.rules` contiene los permisos de perfiles, eventos, inscripciones, comentarios, favoritos, votos, seguimientos, contadores y notificaciones. Exige ubicación confirmada para crear/aprobar eventos, protege la aprobación del administrador y restringe las reseñas a participantes confirmados cuando el evento ha finalizado. Para aplicarlas, abrir **Firebase Console → Firestore Database → Reglas**, reemplazar el contenido con el archivo completo y pulsar **Publicar**. Guardar el archivo local o compilar la APK no publica las reglas. No se han desplegado cambios desde este repositorio.
 
-Estas reglas **no autorizan todavía escrituras de eventos, inscripciones, contadores ni interacciones**; esas operaciones seguirán siendo rechazadas hasta definir sus permisos específicos. No usar `allow read, write: if true` ni dar escritura global a cualquier usuario autenticado: eso permitiría modificar roles y datos ajenos. La app actual escucha toda la colección `users`, por lo que la lectura de perfiles permite a otros usuarios autenticados leer también correo y teléfono. Separar los datos privados exige ajustar ese esquema y las consultas. Las notificaciones solo se leen por su destinatario.
+No usar `allow read, write: if true` ni dar escritura global a cualquier usuario autenticado. Los listeners actuales consultan las colecciones completas de perfiles y eventos: usuarios autenticados pueden leer correo/teléfono y publicaciones pendientes aunque la interfaz filtre lo que muestra. Separar datos privados y limitar esas consultas requiere ajustar el esquema y los listeners. La lista de notificaciones de la app consulta solo al destinatario; creador/moderador también tienen acceso a avisos ligados a su evento para la limpieza al eliminarlo.
 
-Para comprobar estas reglas sin tocar Firebase real, ejecutar `./scripts/test-firestore-rules.ps1` con Firebase CLI, Node y un JDK completo instalados. Usa exclusivamente el proyecto ficticio `demo-share-you-rules` y los puertos locales 19099 (Auth) y 18080 (Firestore). Las reglas abiertas del script de integración anterior son fixtures locales y no deben publicarse.
+Para comprobar estas reglas sin tocar Firebase real, ejecutar `./scripts/test-firestore-rules.ps1` con Firebase CLI, Node y un JDK completo instalados. Usa exclusivamente el proyecto ficticio `demo-share-you-rules` y los puertos locales 19099 (Auth) y 18080 (Firestore). Incluye pruebas de permisos concedidos/denegados, inscripciones, lista de espera, reseñas, relanzamientos y favoritos.
 
 `storage.rules` se publica por separado en **Firebase Console → Storage → Reglas → Publicar**. Autoriza consultar fotos a usuarios autenticados y crear imágenes de hasta 10 MB en `profiles/{uid}/{archivo}` y `events/{uid}/{archivo}`, solo cuando el UID y el metadato `ownerId` corresponden al usuario conectado. Solo el dueño de la carpeta puede borrar sus imágenes. Cada subida usa un UUID nuevo: los listados, las sobrescrituras y las demás rutas están denegados. La limpieza de imágenes ajenas por un moderador requiere un proceso con permisos propios; el cliente actual trata ese borrado como mejor esfuerzo.
 
@@ -41,10 +45,10 @@ Las cuentas de la versión anterior eran simuladas y no existen automáticamente
 | Ruta | Contenido |
 | --- | --- |
 | `users/{uid}` | Perfil vinculado a Authentication: nombre, correo, rol, estado, teléfono, foto, fecha y correo pendiente de verificación. |
-| `events/{id}` | Fechas de inicio/fin en milisegundos, categoría, cupo, autor, foto, moderación y estado. Incluye el mapa `registrations` por UID y `registrationUserIds`. |
+| `events/{id}` | Fechas de inicio/fin, categoría, cupo, autor, foto y moderación. `latitude`, `longitude`, `locationConfirmed` e `isOutdoor` describen el sitio. `seriesId` vincula ediciones y `previousEventId` indica la anterior. Las inscripciones pertenecen a cada edición (`registrations` / `registrationUserIds`). |
 | `comments/{id}` | Evento, autor, texto y fecha. |
 | `votes/{id}` | Un voto por combinación usuario/evento. |
-| `favorites/{id}` | Un favorito por combinación usuario/evento. |
+| `favorites/{id}` | Un favorito por combinación usuario/serie. `eventId` conserva el ID raíz de la serie; `sourceEventId` indica dónde se marcó y `organizerId` permite limpiar la suscripción al retirar la última edición. Los favoritos anteriores de eventos originales siguen siendo válidos. |
 | `following/{id}` | Un seguimiento por combinación usuario/organizador. |
 | `notifications/{id}` | Destinatario, título, mensaje, evento opcional y estado de lectura. El listener consulta solo el destinatario actual. |
 | `metadata/counters` | Contadores transaccionales `events`, `comments` y `notifications`; conserva los identificadores enteros usados por las rutas. |
@@ -54,15 +58,24 @@ Los votos, favoritos y seguimientos usan identificadores deterministas y transac
 
 ## Funciones preservadas
 
-- Crear y editar eventos con inicio/fin reales, dirección, cupo, precio, foto opcional y siete categorías: Deportes, Cultura, Comunidad, Educación, Medio ambiente, Salud y Tecnología.
+- Crear y editar eventos con inicio/fin reales, ubicación confirmada en el mapa, opción de aire libre, cupo, precio, foto opcional y siete categorías: Deportes, Cultura, Comunidad, Educación, Medio ambiente, Salud y Tecnología.
 - Moderar con aprobación o rechazo y motivo obligatorio. Una edición vuelve a revisión. Solo autor/moderador pueden editar, eliminar o finalizar; un evento futuro no se puede finalizar anticipadamente.
 - Confirmar asistencia, cancelar y promover participantes de la lista de espera en orden de llegada.
-- Comentar, eliminar comentarios propios o como moderador, votar positivo/negativo, guardar favoritos y seguir organizadores.
-- Notificaciones internas, lectura individual/todas y navegación al evento; no son notificaciones push.
+- Comentar solo después de finalizar el evento y con inscripción confirmada; estar en espera o cancelar no habilita reseñas. La inscripción confirmada representa participación en este modelo; no existe control de ingreso físico/QR. Se conservan eliminación de comentarios propios/moderación y votos positivo/negativo.
+- Guardar un evento en favoritos conserva el interés en sus siguientes ediciones. El creador puede volver a lanzar un evento aprobado que terminó, escoger fechas nuevas y enviarlo a aprobación. Cada edición tiene ID, cupo, inscripciones, comentarios y votos propios; el historial anterior permanece separado.
+- Notificaciones internas, lectura individual/todas y navegación al evento; no son notificaciones push. Al aprobar una nueva edición se avisa a quienes la tienen en favoritos y a seguidores del organizador, sin duplicar el aviso si cumplen ambos criterios. El destinatario decide inscribirse nuevamente.
 - Editar perfil, foto y teléfono. Un cambio de correo solicita contraseña y envía verificación al correo nuevo; mantiene el anterior hasta verificar. Actualizar sesión sincroniza el correo confirmado de Auth.
 - Eliminar cuenta con contraseña actual: primero reautentica y después limpia datos relacionados y elimina la cuenta Auth. Auth, Firestore y Storage no comparten una transacción; los errores se pueden reintentar y la limpieza de imágenes/notificaciones auxiliares es de mejor esfuerzo.
 - Estadísticas y reputación: `máximo(0, votos netos recibidos en eventos aprobados + 5 × eventos finalizados)`.
-- Mapas existentes conservados. Ninguna selección de foto requiere permiso general de acceso a toda la galería.
+- Mapbox centra el mapa en una ubicación reciente del dispositivo si hay permiso y se logra obtenerla; usa Armenia como respaldo. Inicio y Mapa permiten buscar en otro punto, conservan sus filtros y calculan la distancia desde ese punto; el campo histórico `distanceKm` guardado en Firestore no se usa como distancia común para todos.
+
+## Elegir ubicación y volver a lanzar
+
+En crear/editar, **Elegir en el mapa** abre el selector. El GPS centra la cámara, pero no confirma automáticamente el lugar: es necesario tocar el sitio y pulsar **Confirmar ubicación**. La dirección se sugiere con `Geocoder` de Android; si el servicio no está disponible o no encuentra dirección, se completa una referencia manual manteniendo las coordenadas. La selección manual funciona sin permiso de ubicación. Las respuestas atrasadas de GPS/geocodificación no reemplazan un punto o referencia más recientes. No se añadieron dependencias.
+
+Los eventos anteriores sin `locationConfirmed` se consideran sin ubicación confirmada y se excluyen de filtros geográficos. El creador puede confirmar el punto al editar un evento futuro o al preparar su nueva edición; no se dan por válidas las antiguas coordenadas predeterminadas.
+
+**Volver a lanzar** aparece en Mis eventos → Creados y en el detalle del evento terminado para su creador. Copia información, sitio, foto y horas, y exige elegir nuevas fechas. Crea otra publicación pendiente de aprobación; no copia inscripciones ni reseñas. Las fotos reutilizadas se conservan mientras otra edición las use. La repetición es manual: cada fecha pasa por aprobación y cada persona confirma nuevamente su asistencia.
 
 ## Compilar y comprobar
 
@@ -70,12 +83,12 @@ Abrir en Android Studio, sincronizar Gradle y ejecutar `app`. Se mantienen SDK/G
 
 ```powershell
 .\gradlew.bat :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest --no-daemon
-.\gradlew.bat :app:connectedDebugAndroidTest --no-daemon
+.\scripts\start-firebase-emulators.ps1 -RunTests
 ```
 
 Las pruebas de negocio/ViewModel e interfaz usan repositorios en memoria aislados. `TestRepositoryModule` reemplaza exclusivamente los bindings de pruebas; la APK normal usa Firebase.
 
-Las pruebas `FirebaseIntegrationTest` usan los SDK y repositorios reales contra **Firebase Emulator Suite**, proyecto ficticio `demo-share-you`. Nunca usan los servicios de producción. Son opcionales en la suite habitual y necesitan un emulador Android para acceder al equipo anfitrión por `10.0.2.2`.
+Las pruebas `FirebaseIntegrationTest` usan los SDK y repositorios reales contra **Firebase Emulator Suite**, proyecto ficticio `demo-share-you`. Nunca usan los servicios de producción. Necesitan un emulador Android para acceder al equipo anfitrión por `10.0.2.2`. El comando `start-firebase-emulators.ps1 -RunTests` inicia los servicios, ejecuta toda la suite Android con integración habilitada y apaga los servicios al terminar. Sin ese argumento, el script permite mantenerlos abiertos y ejecutar las pruebas desde otra terminal.
 
 En una terminal, con Firebase CLI y Java instalados:
 
@@ -89,6 +102,6 @@ En otra terminal, con el emulador Android conectado:
 .\gradlew.bat :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.firebaseEmulators=true --no-daemon
 ```
 
-El script genera configuración y reglas mínimas **solo de pruebas** bajo `build/firebase-emulators/`, inicia Auth (9099), Firestore (8080) y Storage (9199) y no despliega nada. La configuración HTTP local solo se incluye en debug; release mantiene HTTPS. Las pruebas cubren autenticación, persistencia entre clientes, rechazo de contraseña incorrecta antes de borrar, cupos concurrentes, promoción de espera, interacciones, avisos e imágenes.
+El script genera configuración bajo `build/firebase-emulators/`, copia las reglas reales del repositorio e inicia Auth (9099), Firestore (8080) y Storage (9199). No despliega nada. Las fixtures administrativas (rol y fechas del pasado) usan exclusivamente la API del emulador, no permisos abiertos en las reglas. La configuración HTTP local solo se incluye en debug; release mantiene HTTPS. Las pruebas cubren autenticación, persistencia entre clientes, cupos concurrentes, promoción de espera, reseñas, nuevas ediciones, favoritos, avisos e imágenes.
 
-Informes: `app/build/reports/`. APK: `app/build/outputs/apk/debug/app-debug.apk`. Verificación del 7 de noviembre de 2026: **22 pruebas JVM y 36 pruebas Android aprobadas**, incluyendo los tres escenarios de integración con Firebase Emulator Suite; **Android Lint: 0 errores y 31 avisos** (principalmente versiones y recursos existentes). El APK debug se generó correctamente. No se ejecutaron pruebas contra el proyecto real; su acceso queda condicionado a los servicios y reglas de la consola.
+Informes: `app/build/reports/`. APK: `app/build/outputs/apk/debug/app-debug.apk`. Las capturas de las nuevas pantallas se exportan como salida adicional de las pruebas Android. Las comprobaciones locales no publican reglas; el acceso al proyecto real depende de aplicar sus archivos desde Firebase Console.

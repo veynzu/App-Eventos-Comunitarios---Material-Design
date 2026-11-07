@@ -24,6 +24,7 @@ class CommunityUseCases @Inject constructor(
     suspend fun addComment(userId: String, eventId: Int, text: String): Result<EventComment> = firebaseResult {
         val user = requireActiveUser(userId)
         val event = requirePublishedEvent(eventId)
+        require(canComment(userId, eventId)) { "Solo puedes comentar después de participar con inscripción confirmada y de finalizar el evento" }
         require(text.isNotBlank()) { "Escribe un comentario" }
         require(text.trim().length <= 1000) { "El comentario no puede superar 1000 caracteres" }
         val comment = EventComment(communityRepository.nextCommentId(), eventId, userId, user.name, text.trim(), System.currentTimeMillis())
@@ -51,8 +52,17 @@ class CommunityUseCases @Inject constructor(
 
     suspend fun toggleFavorite(userId: String, eventId: Int): Result<Unit> = firebaseResult {
         requireActiveUser(userId)
-        requirePublishedEvent(eventId)
-        communityRepository.toggleFavorite(userId, eventId)
+        val event = requirePublishedEvent(eventId)
+        communityRepository.toggleFavorite(userId, eventId, event.seriesId)
+    }
+
+    fun canComment(userId: String, eventId: Int): Boolean {
+        val event = eventRepository.events.value.firstOrNull { it.id == eventId } ?: return false
+        return userRepository.users.value.any { it.id == userId && it.accountStatus == AccountStatus.ACTIVE } &&
+            !event.isDeleted && event.moderationStatus == EventModerationStatus.APPROVED && event.hasEnded &&
+            eventRepository.registrations.value.any {
+                it.userId == userId && it.eventId == eventId && it.status == EventRegistrationStatus.CONFIRMED
+            }
     }
 
     suspend fun toggleFollow(userId: String, organizerId: String): Result<Unit> = firebaseResult {

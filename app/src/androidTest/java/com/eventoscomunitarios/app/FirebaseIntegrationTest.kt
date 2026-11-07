@@ -21,6 +21,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Date
 import java.util.UUID
+import org.json.JSONObject
+import org.json.JSONArray
 import kotlinx.coroutines.*
 import kotlinx.coroutines.tasks.await
 import org.junit.After
@@ -85,7 +87,7 @@ class FirebaseIntegrationTest {
         val owner = client()
         val author = owner.users.register("Organizador", "owner-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.ORGANIZER).getOrThrow()
         // Fixture solo local: el registro público nunca permite elegir ADMINISTRATOR.
-        owner.db.collection("users").document(author.id).update("role", UserRole.ADMINISTRATOR.name).await()
+        fixtureUpdate("users/${author.id}", mapOf("role" to mapOf("stringValue" to UserRole.ADMINISTRATOR.name)))
         waitUntil { owner.users.findUser(author.id)?.role == UserRole.ADMINISTRATOR }
         val a = client()
         val aUser = a.users.register("Participante A", "a-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.PARTICIPANT).getOrThrow()
@@ -96,6 +98,7 @@ class FirebaseIntegrationTest {
         assertTrue(owner.events.moderate(author.id, event.id, EventModerationStatus.REJECTED, " ").isFailure)
         owner.events.moderate(author.id, event.id, EventModerationStatus.APPROVED).getOrThrow()
         waitUntil { a.events.findEvent(event.id)?.moderationStatus == EventModerationStatus.APPROVED && b.events.findEvent(event.id)?.moderationStatus == EventModerationStatus.APPROVED }
+        println("Integración: dos inscripciones concurrentes")
         val statuses = coroutineScope {
             listOf(async { a.events.register(aUser.id, event.id).getOrThrow() },
                 async { b.events.register(bUser.id, event.id).getOrThrow() }).awaitAll()
@@ -106,10 +109,19 @@ class FirebaseIntegrationTest {
         assertEquals(1, owner.events.findEvent(event.id)!!.attendeeCount)
         val confirmed = owner.events.registrations.value.first { it.eventId == event.id && it.status == EventRegistrationStatus.CONFIRMED }
         val (winner, winnerId, promotedId) = if (confirmed.userId == aUser.id) Triple(a, aUser.id, bUser.id) else Triple(b, bUser.id, aUser.id)
+        println("Integración: cancelar y promover espera")
         winner.events.cancelRegistration(winnerId, event.id).getOrThrow()
         waitUntil { owner.events.registrations.value.any { it.eventId == event.id && it.userId == promotedId && it.status == EventRegistrationStatus.CONFIRMED } }
         assertEquals(1, owner.events.findEvent(event.id)!!.attendeeCount)
-        val comment = a.community.addComment(aUser.id, event.id, "Comentario persistido").getOrThrow()
+        val reviewer = if (promotedId == aUser.id) a else b
+        assertTrue(reviewer.community.addComment(promotedId, event.id, "Todavía no finalizó").isFailure)
+        fixtureUpdate("events/${event.id}", mapOf(
+            "startsAt" to mapOf("integerValue" to (System.currentTimeMillis() - 7200000).toString()),
+            "endsAt" to mapOf("integerValue" to (System.currentTimeMillis() - 1000).toString())
+        ))
+        waitUntil { reviewer.events.findEvent(event.id)?.hasEnded == true }
+        println("Integración: reseña posterior a la participación")
+        val comment = reviewer.community.addComment(promotedId, event.id, "Comentario persistido").getOrThrow()
         a.community.vote(aUser.id, event.id, 1).getOrThrow()
         a.community.toggleFavorite(aUser.id, event.id).getOrThrow()
         a.community.toggleFollow(aUser.id, author.id).getOrThrow()
@@ -122,11 +134,50 @@ class FirebaseIntegrationTest {
         val notification = owner.community.notifications.value.first { it.eventId == event.id && it.title == "Nuevo comentario" }
         owner.community.markRead(author.id, notification.id).getOrThrow()
         assertTrue(owner.db.collection("notifications").document(notification.id.toString()).get(Source.SERVER).await().getBoolean("isRead") == true)
+        println("Integración: limpieza de publicación e interacciones")
         owner.events.delete(author.id, event.id).getOrThrow()
         assertFalse(owner.db.collection("events").document(event.id.toString()).get(Source.SERVER).await().exists())
         assertTrue(owner.db.collection("comments").whereEqualTo("eventId", event.id).get(Source.SERVER).await().isEmpty)
         a.userRepository.signOut()
         waitUntil { a.community.notifications.value.isEmpty() && a.events.events.value.isEmpty() }
+    }
+
+    @Test fun relaunchPreservesFavoritesAndNotifiesOnlyAfterNewApproval() = runBlocking {
+        val owner = client()
+        val author = owner.users.register("Autor recurrente", "series-owner-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.ORGANIZER).getOrThrow()
+        fixtureUpdate("users/${author.id}", mapOf("role" to mapOf("stringValue" to UserRole.ADMINISTRATOR.name)))
+        waitUntil { owner.users.findUser(author.id)?.role == UserRole.ADMINISTRATOR }
+        val viewer = client()
+        val participant = viewer.users.register("Público recurrente", "series-viewer-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.PARTICIPANT).getOrThrow()
+        waitUntil { owner.users.findUser(participant.id) != null && viewer.users.findUser(author.id) != null }
+        val original = owner.events.create(author.id, draft(author.id, author.name)).getOrThrow()
+        owner.events.moderate(author.id, original.id, EventModerationStatus.APPROVED).getOrThrow()
+        waitUntil { viewer.events.findEvent(original.id)?.moderationStatus == EventModerationStatus.APPROVED }
+        viewer.community.toggleFavorite(participant.id, original.id).getOrThrow()
+        viewer.events.register(participant.id, original.id).getOrThrow()
+        fixtureUpdate("events/${original.id}", mapOf(
+            "startsAt" to mapOf("integerValue" to (System.currentTimeMillis() - 7200000).toString()),
+            "endsAt" to mapOf("integerValue" to (System.currentTimeMillis() - 1000).toString())
+        ))
+        waitUntil { owner.events.findEvent(original.id)?.hasEnded == true && viewer.events.findEvent(original.id)?.hasEnded == true }
+        val comment = viewer.community.addComment(participant.id, original.id, "Primera edición disfrutada").getOrThrow()
+        val next = owner.events.relaunch(author.id, original.id, draft(author.id, author.name)).getOrThrow()
+        assertEquals(original.seriesId, next.seriesId)
+        assertEquals(EventModerationStatus.PENDING, next.moderationStatus)
+        assertEquals(0, next.attendeeCount)
+        assertFalse(viewer.community.notifications.value.any { it.eventId == next.id })
+        owner.events.moderate(author.id, next.id, EventModerationStatus.APPROVED).getOrThrow()
+        waitUntil { viewer.community.notifications.value.any { it.eventId == next.id && it.title == "Nueva edición de tu evento favorito" } }
+        assertEquals(1, viewer.community.notifications.value.count { it.eventId == next.id && it.title == "Nueva edición de tu evento favorito" })
+        waitUntil { viewer.events.findEvent(next.id)?.moderationStatus == EventModerationStatus.APPROVED }
+        assertFalse(viewer.events.registrations.value.any { it.eventId == next.id && it.userId == participant.id })
+        assertTrue(viewer.community.comments.value.any { it.id == comment.id && it.eventId == original.id })
+        assertFalse(viewer.community.canComment(participant.id, next.id))
+        viewer.events.register(participant.id, next.id).getOrThrow()
+        owner.events.delete(author.id, original.id).getOrThrow()
+        assertTrue(viewer.db.collection("favorites").whereEqualTo("userId", participant.id).get(Source.SERVER).await().documents.isNotEmpty())
+        viewer.community.toggleFavorite(participant.id, next.id).getOrThrow()
+        assertTrue(viewer.db.collection("favorites").whereEqualTo("userId", participant.id).get(Source.SERVER).await().isEmpty)
     }
 
     @Test fun storageUploadsEventAndProfileImagesAndRejectsInvalidContent() = runBlocking {
@@ -180,7 +231,27 @@ class FirebaseIntegrationTest {
         id = 0, title = "Evento Firebase", startsAt = System.currentTimeMillis() + 86_400_000,
         endsAt = System.currentTimeMillis() + 90_000_000, location = "Armenia", distanceKm = 0.0,
         price = 0, category = EventCategory.COMMUNITY, attendeeCount = 0, description = "Prueba multicliente",
-        capacity = 1, organizerId = owner, organizerName = name)
+        capacity = 1, organizerId = owner, organizerName = name, locationConfirmed = true)
+
+    /** Fixture administrativa SOLO en el emulador local, nunca en el proyecto real. */
+    private suspend fun fixtureUpdate(path: String, fields: Map<String, Map<String, Any>>) = withContext(Dispatchers.IO) {
+        val update = JSONObject().put("name", "projects/demo-share-you/databases/(default)/documents/$path")
+            .put("fields", JSONObject().apply { fields.forEach { (key, value) -> put(key, JSONObject(value)) } })
+        val payload = JSONObject().put("writes", JSONArray().put(JSONObject().put("update", update)
+            .put("updateMask", JSONObject().put("fieldPaths", JSONArray(fields.keys.toList())))))
+        val connection = URL("http://$host:8080/v1/projects/demo-share-you/databases/(default)/documents:commit").openConnection() as HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.setRequestProperty("Authorization", "Bearer owner")
+        connection.doOutput = true
+        try {
+            connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+            assertEquals("La fixture local debe guardarse", 200, connection.responseCode)
+            connection.inputStream.close()
+        } finally { connection.disconnect() }
+    }
 
     private suspend fun waitUntil(condition: () -> Boolean) = withTimeout(20_000) {
         while (!condition()) delay(50)

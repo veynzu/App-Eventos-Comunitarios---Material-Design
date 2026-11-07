@@ -7,6 +7,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.SetOptions
@@ -86,8 +87,16 @@ class FirebaseEventRepository @Inject constructor(
         val created = firestore.runTransaction { transaction ->
             val profile = transaction.get(firestore.collection("users").document(actor.id))
             val existing = transaction.get(reference)
+            val previous = event.previousEventId?.let { transaction.get(collection.document(it.toString())) }
             require(profile.exists() && profile.getString("accountStatus") == AccountStatus.ACTIVE.name) { "La cuenta no está disponible" }
             require(!existing.exists()) { "El identificador del evento ya existe; vuelve a intentarlo" }
+            require(event.coordinates != null) { "Confirma la ubicación del evento" }
+            if (previous != null) {
+                require(previous.exists() && previous.getString("organizerId") == actor.id && previous.getBoolean("isDeleted") != true &&
+                    previous.getString("moderationStatus") == EventModerationStatus.APPROVED.name &&
+                    (previous.getBoolean("isFinished") == true || (previous.getLong("endsAt") ?: Long.MAX_VALUE) <= System.currentTimeMillis()) &&
+                    (previous.getLong("seriesId")?.toInt() ?: event.previousEventId) == event.seriesId) { "No puedes volver a lanzar este evento" }
+            } else require(event.seriesId == event.id) { "La serie del evento es inválida" }
             val current = event.copy(organizerId = actor.id, organizerName = profile.getString("name") ?: actor.name,
                 submittedByName = profile.getString("name") ?: actor.name, attendeeCount = 0, revision = 1)
             transaction.set(reference, EventRecord(current, emptyList()).toDocument())
@@ -105,9 +114,11 @@ class FirebaseEventRepository @Inject constructor(
     ): EventChange {
         requireActor(actor.id)
         val reference = collection.document(eventId.toString())
-        val change = firestore.runTransaction { transaction ->
+        var readRevision = -1L
+        suspend fun attemptChange(): EventChange = firestore.runTransaction { transaction ->
             val snapshot = transaction.get(reference)
             val before = requireNotNull(snapshot.toEventRecord()) { "Publicación no encontrada" }
+            readRevision = before.event.revision
             // Todas las lecturas ocurren antes de escribir y se repiten si otro dispositivo modifica el cupo.
             val userIds = before.registrations.filter { it.status == EventRegistrationStatus.WAITLIST }
                 .map { it.userId }.toSet() + actor.id
@@ -125,13 +136,30 @@ class FirebaseEventRepository @Inject constructor(
             }
             if (after == null) {
                 // La marca impide interacciones nuevas mientras se limpia la información relacionada.
-                transaction.set(reference, EventRecord(before.event.copy(isDeleted = true, attendeeCount = 0, revision = before.event.revision + 1), emptyList()).toDocument())
+                if (!before.event.isDeleted) transaction.set(reference, EventRecord(before.event.copy(isDeleted = true, attendeeCount = 0, revision = before.event.revision + 1), emptyList()).toDocument() +
+                    mapOf("lastActorId" to actor.id, "promotedUserId" to null))
             } else {
                 require(after.event.id == eventId) { "El identificador no se puede cambiar" }
-                transaction.set(reference, after.toDocument())
+                val promoted = after.registrations.filter { entry -> entry.status == EventRegistrationStatus.CONFIRMED &&
+                    before.registrations.any { it.userId == entry.userId && it.status == EventRegistrationStatus.WAITLIST } }
+                transaction.set(reference, after.toDocument() + mapOf("lastActorId" to actor.id, "promotedUserId" to promoted.singleOrNull()?.userId))
             }
             EventChange(before, after)
         }.await()
+        var committed: EventChange? = null
+        var attempts = 0
+        while (committed == null) {
+            requireActor(actor.id)
+            try { committed = attemptChange() }
+            catch (failure: FirebaseFirestoreException) {
+                // Reintentar una denegación solo si comprobamos que otra operación cambió la revisión.
+                // Se conservan las reglas de permisos y se repite la transacción con los datos nuevos.
+                if (failure.code != FirebaseFirestoreException.Code.PERMISSION_DENIED || readRevision < 0 || ++attempts >= 3) throw failure
+                val currentRevision = reference.get(Source.SERVER).await().getLong("revision") ?: 0
+                if (currentRevision <= readRevision) throw failure
+            }
+        }
+        val change = committed
         if (auth.currentUser?.uid == actor.id) {
             if (change.after == null) removeFromCache(eventId, change.before.event.revision + 1) else updateCache(change.after)
         }
@@ -202,7 +230,10 @@ private fun DocumentSnapshot.toEventRecord(): EventRecord? {
         organizerName = getString("organizerName").orEmpty(), photoUri = getString("photoUri"), moderationStatus = status,
         submittedAtLabel = getString("submittedAtLabel").orEmpty(), submittedByName = getString("submittedByName").orEmpty(),
         latitude = getDouble("latitude") ?: 4.5339, longitude = getDouble("longitude") ?: -75.6811,
-        isFinished = getBoolean("isFinished") ?: false, rejectionReason = getString("rejectionReason"), isDeleted = getBoolean("isDeleted") ?: false, revision = getLong("revision") ?: 0
+        isFinished = getBoolean("isFinished") ?: false, rejectionReason = getString("rejectionReason"), isDeleted = getBoolean("isDeleted") ?: false, revision = getLong("revision") ?: 0,
+        locationConfirmed = getBoolean("locationConfirmed") ?: false,
+        isOutdoor = getBoolean("isOutdoor") ?: false,
+        seriesId = getLong("seriesId")?.toInt() ?: eventId, previousEventId = getLong("previousEventId")?.toInt()
     )
     return EventRecord(event, entries)
 }
@@ -216,6 +247,9 @@ private fun EventRecord.toDocument(): Map<String, Any?> = with(event) {
         "organizerName" to organizerName, "photoUri" to photoUri, "moderationStatus" to moderationStatus.name,
         "submittedAtLabel" to submittedAtLabel, "submittedByName" to submittedByName,
         "latitude" to latitude, "longitude" to longitude, "isFinished" to isFinished,
+        "locationConfirmed" to locationConfirmed, "seriesId" to seriesId, "previousEventId" to previousEventId,
+        "isOutdoor" to isOutdoor,
+        "lastActorId" to organizerId, "promotedUserId" to null,
         "rejectionReason" to rejectionReason, "isDeleted" to isDeleted, "revision" to revision,
         "registrationUserIds" to registrations.map { it.userId },
         "registrations" to registrations.associate { it.userId to mapOf("status" to it.status.name, "registeredAt" to it.registeredAt, "queueOrder" to it.queueOrder) }

@@ -45,20 +45,21 @@ class InMemoryCommunityRepository @Inject constructor() : CommunityRepository {
             if (it.userId == userId && (notificationId == null || it.id == notificationId)) it.copy(isRead = true) else it
         }
     }
-    override suspend fun toggleFavorite(userId: String, eventId: Int) {
-        val existed = favorites.value.any { it.userId == userId && it.eventId == eventId }
-        val remaining = favorites.value.filterNot { it.userId == userId && it.eventId == eventId }
-        mutableFavorites.value = if (existed) remaining else remaining + EventFavorite(userId, eventId)
+    override suspend fun toggleFavorite(userId: String, eventId: Int, seriesId: Int) {
+        val existed = favorites.value.any { it.userId == userId && it.eventId == seriesId }
+        val remaining = favorites.value.filterNot { it.userId == userId && it.eventId == seriesId }
+        mutableFavorites.value = if (existed) remaining else remaining + EventFavorite(userId, seriesId)
     }
+    override suspend fun favoriteUserIds(seriesId: Int): Set<String> = favorites.value.filter { it.eventId == seriesId }.mapTo(mutableSetOf()) { it.userId }
     override suspend fun toggleFollow(userId: String, organizerId: String) {
         val existed = following.value.any { it.userId == userId && it.organizerId == organizerId }
         val remaining = following.value.filterNot { it.userId == userId && it.organizerId == organizerId }
         mutableFollowing.value = if (existed) remaining else remaining + UserFollow(userId, organizerId)
     }
-    override suspend fun removeForEvent(eventId: Int) {
+    override suspend fun removeForEvent(eventId: Int, favoriteSeriesId: Int?) {
         mutableComments.value = comments.value.filterNot { it.eventId == eventId }
         mutableVotes.value = votes.value.filterNot { it.eventId == eventId }
-        mutableFavorites.value = favorites.value.filterNot { it.eventId == eventId }
+        if (favoriteSeriesId != null) mutableFavorites.value = favorites.value.filterNot { it.eventId == favoriteSeriesId }
         mutableNotifications.value = notifications.value.map { if (it.eventId == eventId) it.copy(eventId = null) else it }
     }
     override suspend fun removeForUser(userId: String) {

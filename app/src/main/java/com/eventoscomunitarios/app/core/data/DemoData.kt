@@ -49,7 +49,7 @@ internal fun demoEvents(): List<Event> {
         attendeeCount = demoRegistrations().count { it.eventId == id && it.status == EventRegistrationStatus.CONFIRMED },
         description = description, capacity = capacity, organizerId = organizerId, organizerName = organizerName,
         moderationStatus = status, submittedAtLabel = "Ejemplo", latitude = 4.5339 + id * 0.001,
-        longitude = -75.6811 + id * 0.001
+        longitude = -75.6811 + id * 0.001, locationConfirmed = true, isOutdoor = location.contains("Parque")
     )
     return listOf(
         example(1, "Torneo de microfútbol", EventCategory.SPORTS, 3, "Parque Cafetero", 60, "Torneo abierto para equipos del barrio. Inscribe tu equipo de cinco jugadores."),

@@ -1,6 +1,7 @@
 package com.eventoscomunitarios.app.features.create_event
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,7 +18,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,6 +36,11 @@ import com.eventoscomunitarios.app.core.components.EventPhotoSelector
 import com.eventoscomunitarios.app.core.components.EventTextField
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.core.util.RequestResult
+import com.eventoscomunitarios.app.features.locationpicker.LocationPickerDialog
+import com.eventoscomunitarios.app.core.components.EventLocationField
+import com.eventoscomunitarios.app.core.components.EventOutdoorField
+import com.eventoscomunitarios.app.R
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,50 +50,50 @@ fun CreateEventScreen(
     viewModel: CreateEventViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("Crear evento") }, navigationIcon = {
-                IconButton(onClick = onCloseClick) { Icon(Icons.Default.Close, "Cerrar") }
-            })
-        },
-        bottomBar = {
-            Button(
-                onClick = viewModel::publishEvent,
-                enabled = state.publishResult != RequestResult.Loading && state.publishResult != RequestResult.Success,
-                modifier = Modifier.fillMaxWidth().padding(16.dp).imePadding()
-            ) { Text("Publicar evento") }
-        }
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
-                .padding(16.dp).testTag("create_event_screen"),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            EventPhotoSelector(state.photoUri, viewModel::onPhotoSelected)
-            EventTextField(state.title, viewModel::onTitleChange, "Título del evento", state.titleError)
-            EventCategorySelector(state.category, state.categoryError, viewModel::onCategoryChange)
-            EventDateTimeFields("Inicio", state.date, state.time, state.dateError, state.timeError,
-                viewModel::onDateChange, viewModel::onTimeChange)
-            EventDateTimeFields("Finalización", state.endDate, state.endTime, state.endDateError, state.endTimeError,
-                viewModel::onEndDateChange, viewModel::onEndTimeChange)
-            EventTextField(state.address, viewModel::onAddressChange, "Dirección", state.addressError)
-            EventTextField(state.description, viewModel::onDescriptionChange, "Descripción", state.descriptionError, minLines = 3)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                EventTextField(state.capacity, viewModel::onCapacityChange, "Cupo", state.capacityError, Modifier.weight(1f), numeric = true)
-                EventTextField(state.price, viewModel::onPriceChange, "Precio (COP)", state.priceError,
-                    Modifier.weight(1f), numeric = true, enabled = !state.isFree)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Evento gratuito")
-                Switch(checked = state.isFree, onCheckedChange = viewModel::onFreeChange)
-            }
-            Text("Cuando se complete el cupo, las personas podrán unirse a la lista de espera.",
-                style = MaterialTheme.typography.bodySmall)
-            (state.publishResult as? RequestResult.Failure)?.let {
-                Text(it.message, color = MaterialTheme.colorScheme.error)
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(title = { Text(if (state.sourceEventId == null) "Crear evento" else stringResource(R.string.new_event_edition)) }, navigationIcon = {
+            IconButton(onClick = onCloseClick) { Icon(Icons.Default.Close, "Cerrar") }
+        })
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(16.dp).testTag("create_event_screen"),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (state.sourceEventId != null) Text(stringResource(R.string.relaunch_event_help), style = MaterialTheme.typography.bodyMedium)
+                EventPhotoSelector(state.photoUri, viewModel::onPhotoSelected)
+                EventTextField(state.title, viewModel::onTitleChange, "Título del evento", state.titleError)
+                EventCategorySelector(state.category, state.categoryError, viewModel::onCategoryChange)
+                EventOutdoorField(state.isOutdoor, viewModel::onOutdoorChange)
+                EventDateTimeFields("Inicio", state.date, state.time, state.dateError, state.timeError,
+                    viewModel::onDateChange, viewModel::onTimeChange)
+                EventDateTimeFields("Finalización", state.endDate, state.endTime, state.endDateError, state.endTimeError,
+                    viewModel::onEndDateChange, viewModel::onEndTimeChange)
+                EventLocationField(state.address, state.coordinates, state.addressError, viewModel::openLocationPicker)
+                EventTextField(state.description, viewModel::onDescriptionChange, "Descripción", state.descriptionError, minLines = 3)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    EventTextField(state.capacity, viewModel::onCapacityChange, "Cupo", state.capacityError, Modifier.weight(1f), numeric = true)
+                    EventTextField(state.price, viewModel::onPriceChange, "Precio (COP)", state.priceError,
+                        Modifier.weight(1f), numeric = true, enabled = !state.isFree)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Evento gratuito")
+                    Switch(checked = state.isFree, onCheckedChange = viewModel::onFreeChange)
+                }
+                Text("Cuando se complete el cupo, las personas podrán unirse a la lista de espera.",
+                    style = MaterialTheme.typography.bodySmall)
+                (state.publishResult as? RequestResult.Failure)?.let {
+                    Text(it.message, color = MaterialTheme.colorScheme.error)
+                }
             }
         }
+        Button(
+            onClick = viewModel::publishEvent,
+            enabled = state.sourceReady && state.publishResult != RequestResult.Loading && state.publishResult != RequestResult.Success,
+            modifier = Modifier.fillMaxWidth().padding(16.dp).imePadding()
+        ) { Text("Publicar evento") }
     }
+    if (state.showLocationPicker) LocationPickerDialog(state.coordinates, state.address, viewModel::closeLocationPicker, viewModel::onLocationSelected)
     if (state.publishResult == RequestResult.Loading) LoadingIndicator()
     if (state.publishResult == RequestResult.Success) {
         AlertDialog(

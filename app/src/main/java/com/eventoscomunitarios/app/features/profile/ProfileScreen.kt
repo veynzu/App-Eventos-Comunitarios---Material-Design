@@ -1,4 +1,4 @@
-﻿package com.eventoscomunitarios.app.features.profile
+package com.eventoscomunitarios.app.features.profile
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -32,8 +32,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -67,10 +65,11 @@ fun ProfileScreen(
     onCerrarSesion: () -> Unit,
     viewModel: ProfileViewModel = hiltViewModel(),
     onNotificationsClick: () -> Unit = {},
-    onAccountDeleted: () -> Unit = onCerrarSesion
+    onAccountDeleted: () -> Unit = onCerrarSesion,
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
     val state by viewModel.uiState.collectAsState()
-    val snackbar = remember { SnackbarHostState() }
+    val snackbar = snackbarHostState
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> viewModel.onPhotoSelected(uri?.toString()) }
     BackHandler(enabled = state.isBusy) { }
     LaunchedEffect(userId) { viewModel.loadUser(userId) }
@@ -81,121 +80,118 @@ fun ProfileScreen(
             viewModel.clearMessage()
         }
     }
-    Scaffold(
-        modifier = Modifier.imePadding(),
-        snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            TopAppBar(
-                title = { Text("Mi perfil") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack, enabled = !state.isBusy) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
-                },
-                actions = {
-                    IconButton(onClick = onNotificationsClick, enabled = !state.isBusy) { Icon(Icons.Default.Notifications, contentDescription = "Notificaciones") }
-                }
-            )
-        }
-    ) { padding ->
-        if (state.loadResult == RequestResult.Loading) {
-            LoadingIndicator()
-        } else {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                val user = state.user
-                if (user == null) {
-                    Text((state.loadResult as? RequestResult.Failure)?.message ?: "El perfil ya no está disponible")
-                    Button(onClick = onCerrarSesion) { Text("Ir al inicio") }
-                } else {
-                    state.syncError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    Box(
-                        modifier = Modifier.size(88.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val imageUri = if (state.isEditing && state.removePhoto) null else state.selectedPhotoUri ?: user.profilePictureUrl
-                        if (imageUri == null) Text(user.name.initials(), style = MaterialTheme.typography.headlineMedium)
-                        else RemoteImage(imageUri, "Foto de perfil", Modifier.size(88.dp).clip(CircleShape))
-                    }
-                    Text(user.name, style = MaterialTheme.typography.titleLarge)
-                    Text(when (user.role) {
-                        UserRole.PARTICIPANT -> "Participante"
-                        UserRole.ORGANIZER -> "Organizador"
-                        UserRole.ADMINISTRATOR -> "Moderador"
-                    }, style = MaterialTheme.typography.labelLarge)
-                    if (state.isEditing) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !state.isBusy) { Text("Elegir foto") }
-                            TextButton(onClick = viewModel::removePhoto, enabled = !state.isBusy) { Text("Quitar foto") }
-                        }
-                        OutlinedTextField(
-                            value = state.name, onValueChange = viewModel::onNameChange,
-                            modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy, label = { Text("Nombre") }, singleLine = true,
-                            isError = state.errors["name"] != null,
-                            supportingText = state.errors["name"]?.let { error -> { Text(error) } }
-                        )
-                        OutlinedTextField(
-                            value = state.email, onValueChange = viewModel::onEmailChange,
-                            modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy, label = { Text("Correo electrónico") }, singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                            isError = state.errors["email"] != null,
-                            supportingText = state.errors["email"]?.let { error -> { Text(error) } }
-                        )
-                        if (!state.email.trim().equals(user.email, true)) {
-                            Text("El nuevo correo se aplicará después de que confirmes el enlace enviado a esa dirección.", style = MaterialTheme.typography.bodySmall)
-                            OutlinedTextField(value = state.reauthPassword, onValueChange = viewModel::onReauthPasswordChange,
-                                modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy, label = { Text("Contraseña actual") },
-                                singleLine = true, visualTransformation = PasswordVisualTransformation(),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                                isError = state.errors["password"] != null,
-                                supportingText = state.errors["password"]?.let { error -> { Text(error) } })
-                        }
-                        OutlinedTextField(
-                            value = state.phoneNumber, onValueChange = viewModel::onPhoneChange,
-                            modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy, label = { Text("Teléfono (opcional)") }, singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                            isError = state.errors["phone"] != null,
-                            supportingText = state.errors["phone"]?.let { error -> { Text(error) } }
-                        )
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = viewModel::cancelEditing, enabled = !state.isBusy, modifier = Modifier.weight(1f)) { Text("Cancelar") }
-                            Button(onClick = viewModel::saveProfile, enabled = !state.isBusy, modifier = Modifier.weight(1f)) { Text(if (state.isBusy) "Guardando…" else "Guardar") }
-                        }
+    Column(Modifier.fillMaxSize().imePadding()) {
+        TopAppBar(
+            title = { Text("Mi perfil") },
+            navigationIcon = {
+                IconButton(onClick = onNavigateBack, enabled = !state.isBusy) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
+            },
+            actions = {
+                IconButton(onClick = onNotificationsClick, enabled = !state.isBusy) { Icon(Icons.Default.Notifications, contentDescription = "Notificaciones") }
+            }
+        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            if (state.loadResult == RequestResult.Loading) {
+                LoadingIndicator()
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val user = state.user
+                    if (user == null) {
+                        Text((state.loadResult as? RequestResult.Failure)?.message ?: "El perfil ya no está disponible")
+                        Button(onClick = onCerrarSesion) { Text("Ir al inicio") }
                     } else {
-                        Text(user.email)
-                        user.pendingEmail?.let { Text("Pendiente de verificar: $it", style = MaterialTheme.typography.bodySmall) }
-                        if (user.pendingEmail != null) OutlinedButton(onClick = viewModel::refreshAccount, enabled = !state.isBusy) { Text(if (state.isBusy) "Actualizando…" else "Actualizar cuenta") }
-                        user.phoneNumber?.let { Text(it) }
-                        Text("Registro: ${SimpleDateFormat("dd/MM/yyyy", Locale.forLanguageTag("es-CO")).format(user.registrationDate)}",
-                            style = MaterialTheme.typography.bodySmall)
-                        OutlinedButton(onClick = viewModel::startEditing, enabled = !state.isBusy, modifier = Modifier.fillMaxWidth()) { Text("Editar perfil") }
-                    }
-                    OutlinedButton(onClick = onNotificationsClick, enabled = !state.isBusy, modifier = Modifier.fillMaxWidth()) {
-                        Text("Notificaciones · ${state.unreadNotifications} sin leer")
-                    }
-                    state.statistics?.let { stats ->
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text("Estadísticas y reputación", style = MaterialTheme.typography.titleMedium)
-                                Text("${stats.reputation} puntos", style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                Text("La reputación suma el balance de votos recibidos y 5 puntos por evento finalizado, con un mínimo de cero.",
-                                    style = MaterialTheme.typography.bodySmall)
-                                HorizontalDivider()
-                                StatisticRow("Publicaciones", stats.publications)
-                                StatisticRow("Publicaciones aprobadas", stats.approvedPublications)
-                                StatisticRow("Eventos finalizados", stats.finishedEvents)
-                                StatisticRow("Asistencias confirmadas", stats.confirmedAttendances)
-                                StatisticRow("En lista de espera", stats.waitlistedAttendances)
-                                StatisticRow("Comentarios realizados", stats.comments)
-                                StatisticRow("Balance de votos recibidos", stats.receivedVotes)
+                        state.syncError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        Box(
+                            modifier = Modifier.size(88.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val imageUri = if (state.isEditing && state.removePhoto) null else state.selectedPhotoUri ?: user.profilePictureUrl
+                            if (imageUri == null) Text(user.name.initials(), style = MaterialTheme.typography.headlineMedium)
+                            else RemoteImage(imageUri, "Foto de perfil", Modifier.size(88.dp).clip(CircleShape))
+                        }
+                        Text(user.name, style = MaterialTheme.typography.titleLarge)
+                        Text(when (user.role) {
+                            UserRole.PARTICIPANT -> "Participante"
+                            UserRole.ORGANIZER -> "Organizador"
+                            UserRole.ADMINISTRATOR -> "Moderador"
+                        }, style = MaterialTheme.typography.labelLarge)
+                        if (state.isEditing) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !state.isBusy) { Text("Elegir foto") }
+                                TextButton(onClick = viewModel::removePhoto, enabled = !state.isBusy) { Text("Quitar foto") }
+                            }
+                            OutlinedTextField(
+                                value = state.name, onValueChange = viewModel::onNameChange,
+                                modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy, label = { Text("Nombre") }, singleLine = true,
+                                isError = state.errors["name"] != null,
+                                supportingText = state.errors["name"]?.let { error -> { Text(error) } }
+                            )
+                            OutlinedTextField(
+                                value = state.email, onValueChange = viewModel::onEmailChange,
+                                modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy, label = { Text("Correo electrónico") }, singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                isError = state.errors["email"] != null,
+                                supportingText = state.errors["email"]?.let { error -> { Text(error) } }
+                            )
+                            if (!state.email.trim().equals(user.email, true)) {
+                                Text("El nuevo correo se aplicará después de que confirmes el enlace enviado a esa dirección.", style = MaterialTheme.typography.bodySmall)
+                                OutlinedTextField(value = state.reauthPassword, onValueChange = viewModel::onReauthPasswordChange,
+                                    modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy, label = { Text("Contraseña actual") },
+                                    singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                    isError = state.errors["password"] != null,
+                                    supportingText = state.errors["password"]?.let { error -> { Text(error) } })
+                            }
+                            OutlinedTextField(
+                                value = state.phoneNumber, onValueChange = viewModel::onPhoneChange,
+                                modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy, label = { Text("Teléfono (opcional)") }, singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                isError = state.errors["phone"] != null,
+                                supportingText = state.errors["phone"]?.let { error -> { Text(error) } }
+                            )
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                OutlinedButton(onClick = viewModel::cancelEditing, enabled = !state.isBusy, modifier = Modifier.weight(1f)) { Text("Cancelar") }
+                                Button(onClick = viewModel::saveProfile, enabled = !state.isBusy, modifier = Modifier.weight(1f)) { Text(if (state.isBusy) "Guardando…" else "Guardar") }
+                            }
+                        } else {
+                            Text(user.email)
+                            user.pendingEmail?.let { Text("Pendiente de verificar: $it", style = MaterialTheme.typography.bodySmall) }
+                            if (user.pendingEmail != null) OutlinedButton(onClick = viewModel::refreshAccount, enabled = !state.isBusy) { Text(if (state.isBusy) "Actualizando…" else "Actualizar cuenta") }
+                            user.phoneNumber?.let { Text(it) }
+                            Text("Registro: ${SimpleDateFormat("dd/MM/yyyy", Locale.forLanguageTag("es-CO")).format(user.registrationDate)}",
+                                style = MaterialTheme.typography.bodySmall)
+                            OutlinedButton(onClick = viewModel::startEditing, enabled = !state.isBusy, modifier = Modifier.fillMaxWidth()) { Text("Editar perfil") }
+                        }
+                        OutlinedButton(onClick = onNotificationsClick, enabled = !state.isBusy, modifier = Modifier.fillMaxWidth()) {
+                            Text("Notificaciones · ${state.unreadNotifications} sin leer")
+                        }
+                        state.statistics?.let { stats ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text("Estadísticas y reputación", style = MaterialTheme.typography.titleMedium)
+                                    Text("${stats.reputation} puntos", style = MaterialTheme.typography.headlineSmall,
+                                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                    Text("La reputación suma el balance de votos recibidos y 5 puntos por evento finalizado, con un mínimo de cero.",
+                                        style = MaterialTheme.typography.bodySmall)
+                                    HorizontalDivider()
+                                    StatisticRow("Publicaciones", stats.publications)
+                                    StatisticRow("Publicaciones aprobadas", stats.approvedPublications)
+                                    StatisticRow("Eventos finalizados", stats.finishedEvents)
+                                    StatisticRow("Asistencias confirmadas", stats.confirmedAttendances)
+                                    StatisticRow("En lista de espera", stats.waitlistedAttendances)
+                                    StatisticRow("Comentarios realizados", stats.comments)
+                                    StatisticRow("Balance de votos recibidos", stats.receivedVotes)
+                                }
                             }
                         }
+                        Button(onClick = onCerrarSesion, enabled = !state.isBusy, modifier = Modifier.fillMaxWidth()) { Text("Cerrar sesión") }
+                        TextButton(onClick = viewModel::requestDeleteAccount, enabled = !state.isBusy,
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Eliminar mi cuenta") }
                     }
-                    Button(onClick = onCerrarSesion, enabled = !state.isBusy, modifier = Modifier.fillMaxWidth()) { Text("Cerrar sesión") }
-                    TextButton(onClick = viewModel::requestDeleteAccount, enabled = !state.isBusy,
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Eliminar mi cuenta") }
                 }
             }
         }

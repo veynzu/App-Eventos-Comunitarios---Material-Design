@@ -28,8 +28,14 @@ data class Event(
     val isFinished: Boolean = false,
     val rejectionReason: String? = null,
     val isDeleted: Boolean = false,
-    val revision: Long = 0
+    val revision: Long = 0,
+    val locationConfirmed: Boolean = false,
+    val seriesId: Int = id,
+    val previousEventId: Int? = null,
+    val isOutdoor: Boolean = false
 ) {
+    val coordinates: Coordinates? get() = Coordinates(latitude, longitude).takeIf { locationConfirmed && it.isValid }
+    val hasEnded: Boolean get() = isFinished || endsAt <= System.currentTimeMillis()
     val isFree: Boolean
         get() = price == 0
     val dateLabel: String get() = SimpleDateFormat("dd/MM/yyyy", Locale("es", "CO")).format(Date(startsAt))

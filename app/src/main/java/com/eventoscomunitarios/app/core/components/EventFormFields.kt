@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Switch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -32,6 +33,29 @@ import com.eventoscomunitarios.app.core.util.parseEventDateTime
 import com.eventoscomunitarios.app.domain.model.EventCategory
 import java.util.Calendar
 import java.util.Locale
+import com.eventoscomunitarios.app.domain.model.Coordinates
+import com.eventoscomunitarios.app.R
+import androidx.compose.ui.res.stringResource
+
+@Composable
+fun EventOutdoorField(value: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Text(stringResource(R.string.outdoor_event))
+        Switch(checked = value, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+fun EventLocationField(address: String, point: Coordinates?, error: String?, onChoose: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(stringResource(R.string.event_location), style = MaterialTheme.typography.labelLarge)
+        OutlinedButton(onClick = onChoose, modifier = Modifier.fillMaxWidth()) {
+            Text(if (point == null) stringResource(R.string.choose_location) else address)
+        }
+        if (point != null) Text("%.5f, %.5f".format(Locale.US, point.latitude, point.longitude), style = MaterialTheme.typography.bodySmall)
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    }
+}
 
 @Composable
 fun EventTextField(

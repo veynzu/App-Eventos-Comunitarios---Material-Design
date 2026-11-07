@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eventoscomunitarios.app.domain.usecase.EventUseCases
 import com.eventoscomunitarios.app.domain.usecase.UserUseCases
+import com.eventoscomunitarios.app.domain.usecase.LocationUseCases
+import com.eventoscomunitarios.app.domain.model.Coordinates
+import com.eventoscomunitarios.app.domain.model.SearchLocation
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import java.util.Calendar
@@ -27,7 +30,9 @@ enum class MapFilter(val label: String) {
 
 data class MapUiState(
     val userId: String = "",
-    val address: String = "Barrio La Castilla",
+    val address: String = "Armenia, Quindío",
+    val searchLocation: SearchLocation = SearchLocation(),
+    val showLocationPicker: Boolean = false,
     val radiusKm: Int = 5,
     val activeFilters: Set<MapFilter> = emptySet(),
     val events: List<Event> = emptyList(),
@@ -35,11 +40,11 @@ data class MapUiState(
     val loadResult: RequestResult = RequestResult.Loading
 ) {
     val visibleEvents: List<Event>
-        get() = events.filter { event ->
+        get() = events.map { event -> event.copy(distanceKm = event.coordinates?.distanceKmTo(searchLocation.coordinates) ?: Double.POSITIVE_INFINITY) }.filter { event ->
             event.moderationStatus == EventModerationStatus.APPROVED && !event.isFinished &&
                 event.endsAt > System.currentTimeMillis() && event.distanceKm <= radiusKm &&
                 (MapFilter.TODAY !in activeFilters || isToday(event)) &&
-                (MapFilter.OUTDOOR !in activeFilters || event.location.contains("Parque", true))
+                (MapFilter.OUTDOOR !in activeFilters || event.isOutdoor)
         }
 
     private fun isToday(event: Event): Boolean {
@@ -57,13 +62,16 @@ data class MapUiState(
 class MapViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val eventUseCases: EventUseCases,
-    private val userUseCases: UserUseCases
+    private val userUseCases: UserUseCases,
+    private val locations: LocationUseCases
 ) : ViewModel() {
     private val userId: String = savedStateHandle["userId"] ?: ""
     private val _uiState = MutableStateFlow(MapUiState(userId = userId))
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch { locations.search.collect { point -> _uiState.update { it.copy(searchLocation = point, address = point.address, selectedEventId = null) } } }
+        viewModelScope.launch { locations.initialize(userId) }
         load()
         viewModelScope.launch {
             combine(eventUseCases.events, eventUseCases.syncState, userUseCases.users, userUseCases.syncState) { _, _, _, _ -> Unit }
@@ -71,9 +79,9 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    fun onAddressChange(value: String) {
-        _uiState.update { it.copy(address = value.take(60)) }
-    }
+    fun openLocationPicker() = _uiState.update { it.copy(showLocationPicker = true) }
+    fun closeLocationPicker() = _uiState.update { it.copy(showLocationPicker = false) }
+    fun selectSearchLocation(point: Coordinates, address: String) { locations.select(point, address, userId); closeLocationPicker() }
 
     fun onRadiusClick() {
         _uiState.update { it.copy(radiusKm = if (it.radiusKm == 5) 10 else 5) }
@@ -94,7 +102,7 @@ class MapViewModel @Inject constructor(
     }
 
     fun centerOnUser() {
-        _uiState.update { it.copy(address = "Barrio La Castilla", radiusKm = 5) }
+        viewModelScope.launch { locations.useDeviceLocation() }
     }
 
     private fun load() {

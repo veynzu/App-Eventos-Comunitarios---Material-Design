@@ -106,6 +106,11 @@ class FirebaseCommunityRepository @Inject constructor(
             val existing = transaction.get(reference)
             requireActive(actor)
             require(event.exists() && event.getBoolean("isDeleted") != true) { "La publicación ya no está disponible" }
+            val attendance = (event.get("registrations") as? Map<*, *>)?.get(uid) as? Map<*, *>
+            require((event.getBoolean("isFinished") == true || (event.getLong("endsAt") ?: Long.MAX_VALUE) <= System.currentTimeMillis()) &&
+                attendance?.get("status") == EventRegistrationStatus.CONFIRMED.name) {
+                "Solo puedes comentar después de participar con inscripción confirmada y de finalizar el evento"
+            }
             if (!existing.exists()) require(event.getString("moderationStatus") == EventModerationStatus.APPROVED.name) { "La publicación todavía no está aprobada" }
             else require(existing.getString("userId") == uid && existing.int("eventId") == comment.eventId) { "No puedes modificar este comentario" }
             require(comment.text.isNotBlank() && comment.text.trim().length <= 1000) { "El comentario debe tener entre 1 y 1000 caracteres" }
@@ -147,20 +152,24 @@ class FirebaseCommunityRepository @Inject constructor(
         }.await()
     }
 
-    override suspend fun toggleFavorite(userId: String, eventId: Int) {
+    override suspend fun toggleFavorite(userId: String, eventId: Int, seriesId: Int) {
         val uid = requireActor(userId)
-        val reference = firestore.collection("favorites").document(pairId(uid, eventId.toString()))
+        val reference = firestore.collection("favorites").document(pairId(uid, seriesId.toString()))
         firestore.runTransaction { transaction ->
             val actor = transaction.get(firestore.collection("users").document(uid))
             val event = transaction.get(firestore.collection("events").document(eventId.toString()))
             val previous = transaction.get(reference)
             requireActive(actor)
             requirePublished(event)
+            require((event.getLong("seriesId")?.toInt() ?: eventId) == seriesId) { "El favorito no corresponde a este evento" }
             if (previous.exists()) transaction.delete(reference)
-            else transaction.set(reference, mapOf("userId" to uid, "eventId" to eventId))
+            else transaction.set(reference, mapOf("userId" to uid, "eventId" to seriesId, "sourceEventId" to eventId, "organizerId" to event.getString("organizerId")))
             !previous.exists()
         }.await()
     }
+
+    override suspend fun favoriteUserIds(seriesId: Int): Set<String> = firestore.collection("favorites")
+        .whereEqualTo("eventId", seriesId).get(Source.SERVER).await().documents.mapNotNull { it.getString("userId") }.toSet()
 
     override suspend fun toggleFollow(userId: String, organizerId: String) {
         val uid = requireActor(userId)
@@ -179,7 +188,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun notify(userId: String, title: String, message: String, eventId: Int?) {
-        requireSignedIn()
+        val senderId = requireSignedIn()
         val createdAt = System.currentTimeMillis()
         firestore.runTransaction { transaction ->
             val recipient = transaction.get(firestore.collection("users").document(userId))
@@ -192,7 +201,8 @@ class FirebaseCommunityRepository @Inject constructor(
             val notification = AppNotification(id, userId, title, message, linkedEventId, createdAt)
             transaction.set(firestore.collection("notifications").document(id.toString()), mapOf(
                 "id" to id, "userId" to userId, "title" to title, "message" to message,
-                "eventId" to linkedEventId, "createdAt" to createdAt, "isRead" to false
+                "eventId" to linkedEventId, "createdAt" to createdAt, "isRead" to false,
+                "contextEventId" to eventId, "senderId" to senderId
             ))
             notification
         }.await()
@@ -219,12 +229,25 @@ class FirebaseCommunityRepository @Inject constructor(
         }
     }
 
-    override suspend fun removeForEvent(eventId: Int) {
+    override suspend fun removeForEvent(eventId: Int, favoriteSeriesId: Int?) {
         requireSignedIn()
+        if (favoriteSeriesId == null) {
+            // Conservar el dueño permite limpiar favoritos aunque se retire la primera edición.
+            val event = firestore.collection("events").document(eventId.toString()).get(Source.SERVER).await()
+            val seriesId = event.getLong("seriesId")?.toInt() ?: eventId
+            val favorites = firestore.collection("favorites").whereEqualTo("eventId", seriesId).get(Source.SERVER).await().documents
+                .filter { !it.contains("organizerId") }
+            favorites.chunked(400).forEach { documents ->
+                val batch = firestore.batch()
+                documents.forEach { batch.update(it.reference, "organizerId", event.getString("organizerId")) }
+                batch.commit().await()
+            }
+        }
         // Se consulta el servidor, incluso si las listas locales no terminaron de sincronizarse.
-        for (collection in listOf("comments", "votes", "favorites")) {
+        for (collection in listOf("comments", "votes")) {
             deleteQuery(firestore.collection(collection).whereEqualTo("eventId", eventId))
         }
+        if (favoriteSeriesId != null) deleteQuery(firestore.collection("favorites").whereEqualTo("eventId", favoriteSeriesId))
         val notices = firestore.collection("notifications").whereEqualTo("eventId", eventId).get(Source.SERVER).await().documents
         notices.chunked(400).forEach { documents ->
             requireSignedIn()

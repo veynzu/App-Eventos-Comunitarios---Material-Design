@@ -29,8 +29,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,7 +48,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.eventoscomunitarios.app.core.components.AdminBottomBar
+import com.eventoscomunitarios.app.core.components.AdminSectionTabs
 import com.eventoscomunitarios.app.core.components.AdminDestination
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.core.util.RequestResult
@@ -69,10 +67,11 @@ fun AdminUsersScreen(
     onDashboardClick: () -> Unit = {},
     onModerationClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
-    onProfileClick: () -> Unit = {}
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
     val state by viewModel.uiState.collectAsState()
     AdminUsersContent(
+        snackbarHostState = snackbarHostState,
         state = state,
         onQueryChange = viewModel::onQueryChange,
         onFilterSelected = viewModel::selectFilter,
@@ -81,7 +80,6 @@ fun AdminUsersScreen(
         onDashboardClick = onDashboardClick,
         onModerationClick = onModerationClick,
         onNotificationsClick = onNotificationsClick,
-        onProfileClick = onProfileClick
     )
 }
 
@@ -95,74 +93,70 @@ private fun AdminUsersContent(
     onDashboardClick: () -> Unit,
     onModerationClick: () -> Unit,
     onNotificationsClick: () -> Unit,
-    onProfileClick: () -> Unit
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
     when (val result = state.loadResult) {
         RequestResult.Loading -> return LoadingIndicator()
         is RequestResult.Failure -> return Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(result.message) }
         RequestResult.Success -> Unit
     }
-    val snackbar = remember { SnackbarHostState() }
+    val snackbar = snackbarHostState
     LaunchedEffect(state.feedback) {
         state.feedback?.let {
             snackbar.showSnackbar(it)
             onFeedbackShown()
         }
     }
-    Scaffold(
-        containerColor = Fondo,
-        snackbarHost = { SnackbarHost(snackbar) },
-        bottomBar = {
-            AdminBottomBar(
-                selected = AdminDestination.USERS,
-                onDashboardClick = onDashboardClick,
-                onModerationClick = onModerationClick,
-                onUsersClick = {},
-                onProfileClick = onProfileClick
-            )
-        }
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).testTag("admin_users_screen")) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Usuarios", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                IconButton(onClick = onNotificationsClick) { Icon(Icons.Default.Notifications, "Notificaciones") }
-                IconButton(onClick = { onFilterSelected(UserFilter.entries[(state.selectedFilter.ordinal + 1) % UserFilter.entries.size]) }) { Icon(Icons.Default.FilterList, "Cambiar filtro de usuarios") }
-            }
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = onQueryChange,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                placeholder = { Text("Buscar por nombre o correo") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                singleLine = true,
-                shape = RoundedCornerShape(28.dp)
-            )
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                UserFilter.entries.forEach { filter ->
-                    FilterChip(
-                        selected = state.selectedFilter == filter,
-                        onClick = { onFilterSelected(filter) },
-                        label = { Text(filter.label) }
-                    )
+    Column(Modifier.fillMaxSize().background(Fondo)) {
+        AdminSectionTabs(
+            selected = AdminDestination.USERS,
+            onDashboardClick = onDashboardClick,
+            onModerationClick = onModerationClick,
+            onUsersClick = {}
+        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(Modifier.fillMaxSize().testTag("admin_users_screen")) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Usuarios", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onNotificationsClick) { Icon(Icons.Default.Notifications, "Notificaciones") }
+                    IconButton(onClick = { onFilterSelected(UserFilter.entries[(state.selectedFilter.ordinal + 1) % UserFilter.entries.size]) }) { Icon(Icons.Default.FilterList, "Cambiar filtro de usuarios") }
                 }
-            }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${state.visibleUsers.size} usuarios", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text("${state.suspendedCount} suspendidos", fontSize = 12.sp, color = Color(0xFFB3261E))
-            }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(state.visibleUsers, key = User::id) { user ->
-                    UserCard(user = user, enabled = !state.isSaving, onToggleStatus = { onToggleStatus(user.id) })
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = onQueryChange,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    placeholder = { Text("Buscar por nombre o correo") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(28.dp)
+                )
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    UserFilter.entries.forEach { filter ->
+                        FilterChip(
+                            selected = state.selectedFilter == filter,
+                            onClick = { onFilterSelected(filter) },
+                            label = { Text(filter.label) }
+                        )
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${state.visibleUsers.size} usuarios", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text("${state.suspendedCount} suspendidos", fontSize = 12.sp, color = Color(0xFFB3261E))
+                }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(state.visibleUsers, key = User::id) { user ->
+                        UserCard(user = user, enabled = !state.isSaving, onToggleStatus = { onToggleStatus(user.id) })
+                    }
                 }
             }
         }
@@ -219,7 +213,7 @@ private fun AdminUsersPreview() {
         AdminUsersContent(
             state = AdminUsersUiState(loadResult = RequestResult.Success, users = emptyList()),
             onQueryChange = {}, onFilterSelected = {}, onToggleStatus = {}, onFeedbackShown = {},
-            onDashboardClick = {}, onModerationClick = {}, onNotificationsClick = {}, onProfileClick = {}
+            onDashboardClick = {}, onModerationClick = {}, onNotificationsClick = {}
         )
     }
 }

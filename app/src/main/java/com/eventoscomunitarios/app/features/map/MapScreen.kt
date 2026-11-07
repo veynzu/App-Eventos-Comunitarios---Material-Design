@@ -33,13 +33,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import com.eventoscomunitarios.app.R
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -58,6 +57,8 @@ import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.Fondo
+import com.eventoscomunitarios.app.core.components.SearchLocationControls
+import com.eventoscomunitarios.app.features.locationpicker.LocationPickerDialog
 import com.eventoscomunitarios.app.ui.theme.TextoPrincipal
 import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 
@@ -65,39 +66,31 @@ import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 fun MapScreen(
     viewModel: MapViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {},
-    onHomeClick: () -> Unit = {},
-    onMyEventsClick: () -> Unit = {},
-    onProfileClick: () -> Unit = {},
     onEventClick: (Int) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     MapContent(
         state = state,
-        onAddressChange = viewModel::onAddressChange,
+        onChooseLocation = viewModel::openLocationPicker,
         onRadiusClick = viewModel::onRadiusClick,
         onFilterClick = viewModel::onFilterClick,
         onEventSelected = viewModel::onEventSelected,
         onCenterClick = viewModel::centerOnUser,
         onNavigateBack = onNavigateBack,
-        onHomeClick = onHomeClick,
-        onMyEventsClick = onMyEventsClick,
-        onProfileClick = onProfileClick,
         onEventClick = onEventClick
     )
+    if (state.showLocationPicker) LocationPickerDialog(state.searchLocation.coordinates, state.searchLocation.address, viewModel::closeLocationPicker, viewModel::selectSearchLocation)
 }
 
 @Composable
 private fun MapContent(
     state: MapUiState,
-    onAddressChange: (String) -> Unit,
+    onChooseLocation: () -> Unit,
     onRadiusClick: () -> Unit,
     onFilterClick: (MapFilter) -> Unit,
     onEventSelected: (Int) -> Unit,
     onCenterClick: () -> Unit,
     onNavigateBack: () -> Unit,
-    onHomeClick: () -> Unit,
-    onMyEventsClick: () -> Unit,
-    onProfileClick: () -> Unit,
     onEventClick: (Int) -> Unit
 ) {
     when (val result = state.loadResult) {
@@ -108,85 +101,73 @@ private fun MapContent(
         RequestResult.Success -> Unit
     }
 
-    Scaffold(
-        containerColor = Fondo,
-        bottomBar = {
-            NavigationBar(containerColor = Color.White) {
-                NavigationBarItem(false, onHomeClick, { Icon(Icons.Default.Home, "Inicio") }, modifier = Modifier.testTag("map_nav_home"), label = { Text("Inicio") })
-                NavigationBarItem(true, {}, { Icon(Icons.Default.Map, "Mapa") }, modifier = Modifier.testTag("map_nav_map"), label = { Text("Mapa") })
-                NavigationBarItem(false, onMyEventsClick, { Icon(Icons.Default.CalendarToday, "Mis eventos") }, modifier = Modifier.testTag("map_nav_events"), label = { Text("Mis eventos") })
-                NavigationBarItem(false, onProfileClick, { Icon(Icons.Default.Person, "Perfil") }, modifier = Modifier.testTag("map_nav_profile"), label = { Text("Perfil") })
-            }
-        }
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás")
+    Column(Modifier.fillMaxSize().background(Fondo)) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás")
+                    }
+                    Box(Modifier.weight(1f).testTag("map_address")) {
+                        SearchLocationControls(state.searchLocation, onChooseLocation, onCenterClick)
+                    }
+                    IconButton(onClick = onRadiusClick) { Icon(Icons.Default.Tune, "Cambiar radio") }
                 }
-                OutlinedTextField(
-                    value = state.address,
-                    onValueChange = onAddressChange,
-                    modifier = Modifier.weight(1f).testTag("map_address"),
-                    singleLine = true,
-                    shape = RoundedCornerShape(28.dp),
-                    leadingIcon = { Icon(Icons.Default.LocationOn, null) }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(selected = true, onClick = onRadiusClick, label = { Text("${state.radiusKm} km") })
+                    MapFilter.entries.forEach { filter ->
+                        FilterChip(
+                            selected = filter in state.activeFilters,
+                            onClick = { onFilterClick(filter) },
+                            label = { Text(filter.label) }
+                        )
+                    }
+                }
+
+                EventMap(
+                    events = state.visibleEvents,
+                    selectedEventId = state.selectedEventId,
+                    onEventSelected = onEventSelected,
+                    onCenterClick = onCenterClick,
+                    center = state.searchLocation.coordinates,
+                    radiusKm = state.radiusKm
                 )
-                IconButton(onClick = onRadiusClick) { Icon(Icons.Default.Tune, "Cambiar radio") }
-            }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(selected = true, onClick = onRadiusClick, label = { Text("${state.radiusKm} km") })
-                MapFilter.entries.forEach { filter ->
-                    FilterChip(
-                        selected = filter in state.activeFilters,
-                        onClick = { onFilterClick(filter) },
-                        label = { Text(filter.label) }
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Box(
+                            Modifier.width(42.dp).height(4.dp).background(Color(0xFFBFC7CE), RoundedCornerShape(2.dp))
+                                .align(Alignment.CenterHorizontally)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text("${state.visibleEvents.size} eventos en esta zona", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    Icon(Icons.Default.FilterAlt, "Ordenar")
                 }
-            }
 
-            EventMap(
-                events = state.visibleEvents,
-                selectedEventId = state.selectedEventId,
-                onEventSelected = onEventSelected,
-                onCenterClick = onCenterClick,
-                radiusKm = state.radiusKm
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Box(
-                        Modifier.width(42.dp).height(4.dp).background(Color(0xFFBFC7CE), RoundedCornerShape(2.dp))
-                            .align(Alignment.CenterHorizontally)
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text("${state.visibleEvents.size} eventos en esta zona", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                }
-                Icon(Icons.Default.FilterAlt, "Ordenar")
-            }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(state.visibleEvents, key = Event::id) { event ->
-                    MapEventCard(
-                        event = event,
-                        selected = event.id == state.selectedEventId,
-                        onSelect = { onEventSelected(event.id) },
-                        onOpen = { onEventClick(event.id) }
-                    )
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(state.visibleEvents, key = Event::id) { event ->
+                        MapEventCard(
+                            event = event,
+                            selected = event.id == state.selectedEventId,
+                            onSelect = { onEventSelected(event.id) },
+                            onOpen = { onEventClick(event.id) }
+                        )
+                    }
                 }
             }
         }
@@ -208,7 +189,7 @@ private fun MapEventCard(event: Event, selected: Boolean, onSelect: () -> Unit, 
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(event.title, fontWeight = FontWeight.SemiBold, color = TextoPrincipal, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${event.distanceKm} km · ${event.dateLabel} ${event.timeLabel}", fontSize = 12.sp, color = TextoSecundario)
+                Text("${stringResource(R.string.event_distance_km, event.distanceKm)} · ${event.dateLabel} ${event.timeLabel}", fontSize = 12.sp, color = TextoSecundario)
                 Text(if (event.isFree) "Gratis" else "$${event.price}", fontSize = 12.sp, color = Color(0xFF25703A), fontWeight = FontWeight.Medium)
             }
             Button(onClick = onOpen) { Text("Ver") }
@@ -222,9 +203,8 @@ private fun MapScreenPreview() {
     AppeventoscomunitariosTheme(darkTheme = false, dynamicColor = false) {
         MapContent(
             state = MapUiState(userId = "participant-ana", events = emptyList(), loadResult = RequestResult.Success),
-            onAddressChange = {}, onRadiusClick = {}, onFilterClick = {}, onEventSelected = {},
-            onCenterClick = {}, onNavigateBack = {}, onHomeClick = {}, onMyEventsClick = {},
-            onProfileClick = {}, onEventClick = {}
+            onChooseLocation = {}, onRadiusClick = {}, onFilterClick = {}, onEventSelected = {},
+            onCenterClick = {}, onNavigateBack = {}, onEventClick = {},
         )
     }
 }

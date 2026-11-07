@@ -14,8 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -30,7 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.eventoscomunitarios.app.core.components.AdminBottomBar
+import com.eventoscomunitarios.app.core.components.AdminSectionTabs
 import com.eventoscomunitarios.app.core.components.AdminDestination
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.core.components.ModerationActionDialog
@@ -43,8 +41,8 @@ fun AdminModerationScreen(
     viewModel: AdminModerationViewModel = hiltViewModel(),
     onDashboardClick: () -> Unit = {},
     onUsersClick: () -> Unit = {},
-    onProfileClick: () -> Unit = {},
-    onEventDetail: (Int) -> Unit = {}
+    onEventDetail: (Int) -> Unit = {},
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
     val state by viewModel.uiState.collectAsState()
     when (val result = state.loadResult) {
@@ -52,41 +50,41 @@ fun AdminModerationScreen(
         is RequestResult.Failure -> return Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(result.message) }
         RequestResult.Success -> Unit
     }
-    val snackbar = remember { SnackbarHostState() }
+    val snackbar = snackbarHostState
     LaunchedEffect(state.feedback) {
         state.feedback?.let { snackbar.showSnackbar(it); viewModel.clearFeedback() }
     }
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
-        bottomBar = { AdminBottomBar(selected = AdminDestination.MODERATION,
-            onDashboardClick = onDashboardClick, onModerationClick = {}, onUsersClick = onUsersClick, onProfileClick = onProfileClick) }
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).testTag("admin_moderation_screen")) {
-            Text("Moderación", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
-            TabRow(selectedTabIndex = state.selectedTab.ordinal) {
-                ModerationTab.entries.forEach { tab ->
-                    Tab(selected = tab == state.selectedTab, onClick = { viewModel.selectTab(tab) },
-                        text = { Text(if (tab == ModerationTab.PENDING) "${tab.label} ${state.pendingCount}" else tab.label) })
+    Column(Modifier.fillMaxSize()) {
+        AdminSectionTabs(selected = AdminDestination.MODERATION,
+                   onDashboardClick = onDashboardClick, onModerationClick = {}, onUsersClick = onUsersClick)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(Modifier.fillMaxSize().testTag("admin_moderation_screen")) {
+                Text("Moderación", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
+                TabRow(selectedTabIndex = state.selectedTab.ordinal) {
+                    ModerationTab.entries.forEach { tab ->
+                        Tab(selected = tab == state.selectedTab, onClick = { viewModel.selectTab(tab) },
+                            text = { Text(if (tab == ModerationTab.PENDING) "${tab.label} ${state.pendingCount}" else tab.label) })
+                    }
                 }
-            }
-            OutlinedTextField(value = state.query, onValueChange = viewModel::onQueryChange,
-                label = { Text("Buscar por título o autor") }, singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = state.category == null, onClick = { viewModel.selectCategory(null) }, label = { Text("Todas") })
-                EventCategory.entries.forEach { category ->
-                    FilterChip(selected = state.category == category, onClick = { viewModel.selectCategory(category) }, label = { Text(category.displayName) })
+                OutlinedTextField(value = state.query, onValueChange = viewModel::onQueryChange,
+                    label = { Text("Buscar por título o autor") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = state.category == null, onClick = { viewModel.selectCategory(null) }, label = { Text("Todas") })
+                    EventCategory.entries.forEach { category ->
+                        FilterChip(selected = state.category == category, onClick = { viewModel.selectCategory(category) }, label = { Text(category.displayName) })
+                    }
                 }
-            }
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (state.visibleEvents.isEmpty()) item { Text("No hay eventos que coincidan con los filtros.") }
-                items(state.visibleEvents, key = { it.id }) { event ->
-                    ModerationEventCard(event = event,
-                        onReject = { viewModel.reject(event.id) }, onDetail = { onEventDetail(event.id) },
-                        onApprove = { viewModel.approve(event.id) }, onDelete = { viewModel.requestDelete(event.id) },
-                        onFinish = { viewModel.requestFinish(event.id) })
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (state.visibleEvents.isEmpty()) item { Text("No hay eventos que coincidan con los filtros.") }
+                    items(state.visibleEvents, key = { it.id }) { event ->
+                        ModerationEventCard(event = event,
+                            onReject = { viewModel.reject(event.id) }, onDetail = { onEventDetail(event.id) },
+                            onApprove = { viewModel.approve(event.id) }, onDelete = { viewModel.requestDelete(event.id) },
+                            onFinish = { viewModel.requestFinish(event.id) })
+                    }
                 }
             }
         }

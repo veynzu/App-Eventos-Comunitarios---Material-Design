@@ -23,7 +23,7 @@ class AdminAndMapViewModelTest {
     private fun handle(user: String = "administrator-laura") = SavedStateHandle(mapOf("userId" to user))
 
     @Test fun mapShowsOnlyApprovedActiveEventsWithinRadius() = runBlocking {
-        val map = MapViewModel(handle("participant-ana"), data.events, data.users)
+        val map = MapViewModel(handle("participant-ana"), data.events, data.users, data.locations)
         assertEquals(RequestResult.Success, map.uiState.value.loadResult)
         assertTrue(map.uiState.value.visibleEvents.all {
             it.moderationStatus == EventModerationStatus.APPROVED && !it.isFinished && it.distanceKm <= 5

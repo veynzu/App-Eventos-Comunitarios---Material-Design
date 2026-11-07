@@ -1,6 +1,7 @@
 package com.eventoscomunitarios.app.features.edit_event
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,7 +18,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,6 +36,9 @@ import com.eventoscomunitarios.app.core.components.EventPhotoSelector
 import com.eventoscomunitarios.app.core.components.EventTextField
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.core.util.RequestResult
+import com.eventoscomunitarios.app.features.locationpicker.LocationPickerDialog
+import com.eventoscomunitarios.app.core.components.EventLocationField
+import com.eventoscomunitarios.app.core.components.EventOutdoorField
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,54 +59,53 @@ fun EditEventScreen(
         }
         RequestResult.Success -> Unit
     }
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("Editar evento") }, navigationIcon = {
-                IconButton(onClick = onCloseClick) { Icon(Icons.Default.Close, "Cerrar") }
-            })
-        },
-        bottomBar = {
-            Button(
-                onClick = viewModel::saveChanges,
-                enabled = state.saveResult != RequestResult.Loading && state.saveResult != RequestResult.Success,
-                modifier = Modifier.fillMaxWidth().padding(16.dp).imePadding()
-            ) { Text("Guardar y enviar a revisión") }
-        }
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
-                .padding(16.dp).testTag("edit_event_screen"),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            state.rejectionReason?.let {
-                Text("Motivo del rechazo: $it", color = MaterialTheme.colorScheme.error)
-            }
-            Text("Los cambios se enviarán nuevamente a moderación.", style = MaterialTheme.typography.bodySmall)
-            EventPhotoSelector(state.photoUri, viewModel::onPhotoSelected)
-            EventTextField(state.title, viewModel::onTitleChange, "Título del evento", state.titleError)
-            EventCategorySelector(state.category, state.categoryError, viewModel::onCategoryChange)
-            EventDateTimeFields("Inicio", state.date, state.time, state.dateError, state.timeError,
-                viewModel::onDateChange, viewModel::onTimeChange)
-            EventDateTimeFields("Finalización", state.endDate, state.endTime, state.endDateError, state.endTimeError,
-                viewModel::onEndDateChange, viewModel::onEndTimeChange)
-            EventTextField(state.address, viewModel::onAddressChange, "Dirección", state.addressError)
-            EventTextField(state.description, viewModel::onDescriptionChange, "Descripción", state.descriptionError, minLines = 3)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                EventTextField(state.capacity, viewModel::onCapacityChange, "Cupo", state.capacityError, Modifier.weight(1f), numeric = true)
-                EventTextField(state.price, viewModel::onPriceChange, "Precio (COP)", state.priceError,
-                    Modifier.weight(1f), numeric = true, enabled = !state.isFree)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Evento gratuito")
-                Switch(checked = state.isFree, onCheckedChange = viewModel::onFreeChange)
-            }
-            Text("Cuando se complete el cupo, las personas podrán unirse a la lista de espera.",
-                style = MaterialTheme.typography.bodySmall)
-            (state.saveResult as? RequestResult.Failure)?.let {
-                Text(it.message, color = MaterialTheme.colorScheme.error)
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(title = { Text("Editar evento") }, navigationIcon = {
+            IconButton(onClick = onCloseClick) { Icon(Icons.Default.Close, "Cerrar") }
+        })
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(16.dp).testTag("edit_event_screen"),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                state.rejectionReason?.let {
+                    Text("Motivo del rechazo: $it", color = MaterialTheme.colorScheme.error)
+                }
+                Text("Los cambios se enviarán nuevamente a moderación.", style = MaterialTheme.typography.bodySmall)
+                EventPhotoSelector(state.photoUri, viewModel::onPhotoSelected)
+                EventTextField(state.title, viewModel::onTitleChange, "Título del evento", state.titleError)
+                EventCategorySelector(state.category, state.categoryError, viewModel::onCategoryChange)
+                EventOutdoorField(state.isOutdoor, viewModel::onOutdoorChange)
+                EventDateTimeFields("Inicio", state.date, state.time, state.dateError, state.timeError,
+                    viewModel::onDateChange, viewModel::onTimeChange)
+                EventDateTimeFields("Finalización", state.endDate, state.endTime, state.endDateError, state.endTimeError,
+                    viewModel::onEndDateChange, viewModel::onEndTimeChange)
+                EventLocationField(state.address, state.coordinates, state.addressError, viewModel::openLocationPicker)
+                EventTextField(state.description, viewModel::onDescriptionChange, "Descripción", state.descriptionError, minLines = 3)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    EventTextField(state.capacity, viewModel::onCapacityChange, "Cupo", state.capacityError, Modifier.weight(1f), numeric = true)
+                    EventTextField(state.price, viewModel::onPriceChange, "Precio (COP)", state.priceError,
+                        Modifier.weight(1f), numeric = true, enabled = !state.isFree)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Evento gratuito")
+                    Switch(checked = state.isFree, onCheckedChange = viewModel::onFreeChange)
+                }
+                Text("Cuando se complete el cupo, las personas podrán unirse a la lista de espera.",
+                    style = MaterialTheme.typography.bodySmall)
+                (state.saveResult as? RequestResult.Failure)?.let {
+                    Text(it.message, color = MaterialTheme.colorScheme.error)
+                }
             }
         }
+        Button(
+            onClick = viewModel::saveChanges,
+            enabled = state.saveResult != RequestResult.Loading && state.saveResult != RequestResult.Success,
+            modifier = Modifier.fillMaxWidth().padding(16.dp).imePadding()
+        ) { Text("Guardar y enviar a revisión") }
     }
+    if (state.showLocationPicker) LocationPickerDialog(state.coordinates, state.address, viewModel::closeLocationPicker, viewModel::onLocationSelected)
     if (state.saveResult == RequestResult.Loading) LoadingIndicator()
     if (state.saveResult == RequestResult.Success) {
         AlertDialog(
