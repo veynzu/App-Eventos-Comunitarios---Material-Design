@@ -89,6 +89,7 @@ class FirebaseEventRepository @Inject constructor(
             val existing = transaction.get(reference)
             val previous = event.previousEventId?.let { transaction.get(collection.document(it.toString())) }
             require(profile.exists() && profile.getString("accountStatus") == AccountStatus.ACTIVE.name) { "La cuenta no está disponible" }
+            require(profile.canCreateEvents()) { "Solo un organizador verificado o un administrador puede publicar eventos" }
             require(!existing.exists()) { "El identificador del evento ya existe; vuelve a intentarlo" }
             require(event.coordinates != null) { "Confirma la ubicación del evento" }
             if (previous != null) {
@@ -128,7 +129,9 @@ class FirebaseEventRepository @Inject constructor(
             val freshActor = actor.copy(
                 name = profile.getString("name") ?: actor.name,
                 role = enumValueOrNull<UserRole>(profile.getString("role")) ?: UserRole.PARTICIPANT,
-                accountStatus = AccountStatus.ACTIVE
+                accountStatus = AccountStatus.ACTIVE,
+                organizerVerificationStatus = enumValueOrNull<OrganizerVerificationStatus>(profile.getString("organizerVerificationStatus"))
+                    ?: OrganizerVerificationStatus.PENDING
             )
             val activeIds = profiles.filterValues { it.exists() && it.getString("accountStatus") == AccountStatus.ACTIVE.name }.keys
             val after = transform(before, freshActor, activeIds)?.let {
@@ -208,6 +211,12 @@ class FirebaseEventRepository @Inject constructor(
 
 private inline fun <reified T : Enum<T>> enumValueOrNull(value: String?): T? =
     enumValues<T>().firstOrNull { it.name == value }
+
+private fun DocumentSnapshot.canCreateEvents(): Boolean =
+    getString("accountStatus") == AccountStatus.ACTIVE.name &&
+        (getString("role") == UserRole.ADMINISTRATOR.name ||
+            (getString("role") == UserRole.ORGANIZER.name &&
+                getString("organizerVerificationStatus") == OrganizerVerificationStatus.VERIFIED.name))
 
 private fun DocumentSnapshot.toEventRecord(): EventRecord? {
     if (!exists()) return null

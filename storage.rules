@@ -6,7 +6,13 @@ service firebase.storage {
     }
 
     function validFolder(folder) {
-      return folder in ['profiles', 'events'];
+      return folder in ['profiles', 'events', 'identities'];
+    }
+
+    function isModerator() {
+      return signedIn()
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'ADMINISTRATOR'
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.accountStatus == 'ACTIVE';
     }
 
     function ownsFolder(uid) {
@@ -15,7 +21,8 @@ service firebase.storage {
 
     match /{folder}/{uid}/{fileName} {
       // Permite consultar fotos de perfiles y eventos desde la app.
-      allow get: if validFolder(folder) && signedIn();
+      allow get: if validFolder(folder) && signedIn()
+        && (folder != 'identities' || ownsFolder(uid) || isModerator());
 
       // FirebaseMediaRepository genera un UUID nuevo para cada imagen.
       allow create: if validFolder(folder)

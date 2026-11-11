@@ -7,7 +7,6 @@ import com.eventoscomunitarios.app.core.util.initials
 import com.eventoscomunitarios.app.domain.model.AccountStatus
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventCategory
-import com.eventoscomunitarios.app.domain.model.EventModerationStatus
 import com.eventoscomunitarios.app.domain.model.EventRegistrationStatus
 import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.domain.usecase.CommunityUseCases
@@ -21,12 +20,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.Calendar
+import com.eventoscomunitarios.app.domain.model.EventSearchOptions
+import com.eventoscomunitarios.app.domain.model.EventDateField
+import com.eventoscomunitarios.app.domain.usecase.filterEvents
 import javax.inject.Inject
 
 enum class HomeFilter(val label: String) {
@@ -41,6 +41,8 @@ data class HomeUiState(
     val searchLocation: SearchLocation = SearchLocation(),
     val showLocationPicker: Boolean = false,
     val searchRadiusKm: Float = 5f,
+    val searchOptions: EventSearchOptions = EventSearchOptions(),
+    val datePickerField: EventDateField? = null,
     val selectedFilter: HomeFilter = HomeFilter.ALL,
     val selectedCategory: EventCategory? = null,
     val query: String = "",
@@ -56,26 +58,16 @@ data class HomeUiState(
     val userInitials: String get() = userName.initials()
 
     val filteredEvents: List<Event>
-        get() {
-            val today = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-            }
-            val todayStart = today.timeInMillis
-            val tomorrow = (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }.timeInMillis
-            return events.map { event -> event.copy(distanceKm = event.coordinates?.distanceKmTo(searchLocation.coordinates) ?: Double.POSITIVE_INFINITY) }.filter { event ->
-                event.moderationStatus == EventModerationStatus.APPROVED &&
-                    event.distanceKm <= searchRadiusKm &&
-                    (selectedCategory == null || event.category == selectedCategory) &&
-                    (query.isBlank() || event.title.contains(query, true) || event.location.contains(query, true)) &&
-                    when (selectedFilter) {
-                        HomeFilter.ALL -> true
-                        HomeFilter.TODAY -> event.startsAt < tomorrow && event.endsAt > todayStart
-                        HomeFilter.FREE -> event.isFree
-                        HomeFilter.FAVORITES -> event.id in favoriteEventIds
-                    }
-            }.sortedWith(compareBy<Event> { it.isFinished || it.endsAt <= System.currentTimeMillis() }.thenBy { it.startsAt })
-        }
+        get() = filterEvents(
+            events = events,
+            origin = searchLocation.coordinates,
+            radiusKm = searchRadiusKm.toDouble(),
+            options = searchOptions.copy(freeOnly = searchOptions.freeOnly || selectedFilter == HomeFilter.FREE),
+            category = selectedCategory,
+            query = query,
+            todayOnly = selectedFilter == HomeFilter.TODAY,
+            favoriteIds = favoriteEventIds.takeIf { selectedFilter == HomeFilter.FAVORITES }
+        )
 }
 
 @HiltViewModel
@@ -134,7 +126,22 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun onSearchRadiusChange(value: Float) = _uiState.update { it.copy(searchRadiusKm = value) }
+    fun onSearchRadiusChange(value: Float) = _uiState.update { it.copy(searchRadiusKm = value.coerceIn(1f, 100f)) }
+    fun onSearchOptionsChange(value: EventSearchOptions) = _uiState.update { it.copy(searchOptions = value) }
+    fun onDatePickerChange(field: EventDateField?) = _uiState.update { it.copy(datePickerField = field) }
+    fun onDateSelected(field: EventDateField, date: Long) = _uiState.update {
+        it.copy(searchOptions = it.searchOptions.withDate(field, date),
+            selectedFilter = if (it.selectedFilter == HomeFilter.TODAY) HomeFilter.ALL else it.selectedFilter)
+    }
+    fun onTodayClick() = _uiState.update {
+        it.copy(selectedFilter = if (it.selectedFilter == HomeFilter.TODAY) HomeFilter.ALL else it.selectedFilter,
+            searchOptions = it.searchOptions.copy(fromDate = null, untilDate = null,
+                todayOnly = !(it.searchOptions.todayOnly || it.selectedFilter == HomeFilter.TODAY)))
+    }
+    fun resetFilters() = _uiState.update {
+        it.copy(searchRadiusKm = 5f, searchOptions = EventSearchOptions(), selectedFilter = HomeFilter.ALL,
+            selectedCategory = null, query = "", datePickerField = null)
+    }
     fun openLocationPicker() = _uiState.update { it.copy(showLocationPicker = true) }
     fun closeLocationPicker() = _uiState.update { it.copy(showLocationPicker = false) }
     fun selectSearchLocation(point: Coordinates, address: String) { locations.select(point, address, currentUserId); closeLocationPicker() }

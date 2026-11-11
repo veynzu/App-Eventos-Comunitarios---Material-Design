@@ -13,10 +13,22 @@ data class User(
     // Dato adicional que solicita el formulario actual.
     val phoneNumber: String? = null,
     val accountStatus: AccountStatus = AccountStatus.ACTIVE,
-    val pendingEmail: String? = null
-)
+    val pendingEmail: String? = null,
+    val organizerVerificationStatus: OrganizerVerificationStatus = if (role == UserRole.ORGANIZER)
+        OrganizerVerificationStatus.PENDING else OrganizerVerificationStatus.NOT_REQUIRED
+) {
+    val canCreateEvents: Boolean get() = accountStatus == AccountStatus.ACTIVE &&
+        (role == UserRole.ADMINISTRATOR || (role == UserRole.ORGANIZER &&
+            organizerVerificationStatus == OrganizerVerificationStatus.VERIFIED))
+    val canPublishEvents: Boolean get() = canCreateEvents
+}
 
 enum class AccountStatus {
     ACTIVE,
     SUSPENDED
 }
+
+/** La identidad del organizador se aprueba manualmente; no corresponde a verificar el correo. */
+enum class OrganizerVerificationStatus { NOT_REQUIRED, PENDING, VERIFIED, REJECTED }
+
+data class OrganizerIdentity(val photoPath: String, val imageBytes: ByteArray)

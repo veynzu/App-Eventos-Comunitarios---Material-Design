@@ -10,7 +10,10 @@ interface UserRepository {
     val currentUserId: StateFlow<String?>
     val sessionReady: StateFlow<Boolean>
     suspend fun login(email: String, password: String): User
-    suspend fun register(user: User, password: String): User
+    suspend fun register(user: User, password: String, identityPhotoUri: String? = null): User
+    suspend fun organizerIdentityPath(userId: String): String?
+    suspend fun saveOrganizerIdentity(userId: String, photoPath: String): User
+    suspend fun reviewOrganizerIdentity(userId: String, expectedPhotoPath: String, approve: Boolean): User
     suspend fun recoverPassword(email: String)
     suspend fun save(user: User)
     suspend fun reauthenticate(userId: String, password: String)

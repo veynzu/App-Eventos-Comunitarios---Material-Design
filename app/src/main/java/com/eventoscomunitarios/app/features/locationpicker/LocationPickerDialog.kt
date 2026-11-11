@@ -1,4 +1,5 @@
 package com.eventoscomunitarios.app.features.locationpicker
+import com.eventoscomunitarios.app.core.util.localizedMessage
 
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -67,7 +68,7 @@ fun LocationPickerDialog(
                     }
                 }
                 if (state.isLocating || state.isResolvingAddress) LinearProgressIndicator(Modifier.fillMaxWidth())
-                state.notice?.let { Text(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall) }
+                state.notice?.let { Text(localizedMessage(it), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall) }
                 OutlinedTextField(value = state.address, onValueChange = viewModel::onAddressChange,
                     enabled = state.point != null, modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("location_address"),
                     label = { Text(stringResource(R.string.location_address_reference)) }, maxLines = 3)

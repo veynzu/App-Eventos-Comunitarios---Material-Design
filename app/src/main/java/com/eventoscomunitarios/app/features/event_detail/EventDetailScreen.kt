@@ -1,5 +1,7 @@
 package com.eventoscomunitarios.app.features.event_detail
 
+import com.eventoscomunitarios.app.core.util.localizedMessage
+
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -61,13 +63,14 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
+import com.eventoscomunitarios.app.core.components.localizedName
+import androidx.compose.ui.platform.LocalConfiguration
 import com.eventoscomunitarios.app.core.util.initials
 import com.eventoscomunitarios.app.domain.model.EventCategory
 import com.eventoscomunitarios.app.domain.model.EventModerationStatus
 import com.eventoscomunitarios.app.domain.model.EventRegistrationStatus
 import com.eventoscomunitarios.app.ui.theme.TextoPrincipal
 import com.eventoscomunitarios.app.ui.theme.TextoSecundario
-import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.eventoscomunitarios.app.R
@@ -84,6 +87,7 @@ fun EventDetailScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val locale = LocalConfiguration.current.locales[0]
     val snackbar = snackbarHostState
     LaunchedEffect(state.attendanceConfirmedEventId) {
         state.attendanceConfirmedEventId?.let { eventId ->
@@ -105,10 +109,10 @@ fun EventDetailScreen(
     }
     Column(Modifier.fillMaxSize().imePadding()) {
         TopAppBar(
-            title = { Text("Detalle del evento") },
+            title = { Text(stringResource(R.string.ui_detail_title)) },
             navigationIcon = {
                 IconButton(onClick = onNavigateBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.ui_back_alt))
                 }
             },
             actions = {
@@ -117,14 +121,14 @@ fun EventDetailScreen(
                         val intent = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
                             putExtra(Intent.EXTRA_TEXT,
-                                "${event.title}\nInicio: ${formatDateTime(event.startsAt)}\nFin: ${formatDateTime(event.endsAt)}\n${event.location}")
+                                context.getString(R.string.ui_share_message, event.title, formatDateTime(event.startsAt, locale), formatDateTime(event.endsAt, locale), event.location))
                         }
-                        context.startActivity(Intent.createChooser(intent, "Compartir evento"))
-                    }) { Icon(Icons.Default.Share, contentDescription = "Compartir") }
+                        context.startActivity(Intent.createChooser(intent, context.getString(R.string.ui_share_event)))
+                    }) { Icon(Icons.Default.Share, contentDescription = stringResource(R.string.ui_share)) }
                     IconButton(onClick = viewModel::toggleFavorite, enabled = state.canFavorite && !state.isSaving) {
                         Icon(
                             if (state.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = if (state.isFavorite) "Quitar de favoritos" else "Agregar a favoritos",
+                            contentDescription = if (state.isFavorite) stringResource(R.string.ui_remove_favorite) else stringResource(R.string.ui_add_favorite),
                             tint = if (state.isFavorite) Color(0xFFD94D68) else TextoPrincipal
                         )
                     }
@@ -136,7 +140,7 @@ fun EventDetailScreen(
             when {
                 state.isLoading -> LoadingIndicator()
                 event == null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text(state.error ?: "Evento no disponible")
+                    Text(localizedMessage(state.error ?: stringResource(R.string.ui_event_unavailable)))
                 }
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -144,45 +148,45 @@ fun EventDetailScreen(
                 ) {
                     if (state.isSaving) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
                     state.syncError?.let { message ->
-                        item { Text(message, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 24.dp)) }
+                        item { Text(localizedMessage(message), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 24.dp)) }
                     }
                     event.photoUri?.takeIf { it.isNotBlank() }?.let { photo ->
                         item {
-                            AsyncImage(model = photo, contentDescription = "Foto de ${event.title}",
+                            AsyncImage(model = photo, contentDescription = stringResource(R.string.ui_photo_of, event.title),
                                 modifier = Modifier.fillMaxWidth().height(220.dp), contentScale = ContentScale.Crop)
                         }
                     }
                     item {
                         Column(Modifier.fillMaxWidth().background(headerBackground).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(event.category.displayName, style = MaterialTheme.typography.labelLarge)
+                            Text(event.category.localizedName(), style = MaterialTheme.typography.labelLarge)
                             Text(event.title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = TextoPrincipal)
                             Text(when {
-                                event.moderationStatus == EventModerationStatus.PENDING -> "Pendiente de moderación"
-                                event.moderationStatus == EventModerationStatus.REJECTED -> "Publicación rechazada"
-                                event.isFinished || event.endsAt <= System.currentTimeMillis() -> "Evento finalizado"
-                                event.startsAt <= System.currentTimeMillis() -> "Evento en curso · inscripciones cerradas"
-                                else -> "Publicación aprobada"
+                                event.moderationStatus == EventModerationStatus.PENDING -> stringResource(R.string.ui_moderation_pending)
+                                event.moderationStatus == EventModerationStatus.REJECTED -> stringResource(R.string.ui_post_rejected)
+                                event.isFinished || event.endsAt <= System.currentTimeMillis() -> stringResource(R.string.ui_event_finished)
+                                event.startsAt <= System.currentTimeMillis() -> stringResource(R.string.ui_event_started)
+                                else -> stringResource(R.string.ui_post_approved)
                             }, fontWeight = FontWeight.SemiBold)
                             event.rejectionReason?.takeIf { it.isNotBlank() }?.let {
-                                Text("Motivo del rechazo: $it", color = MaterialTheme.colorScheme.error)
+                                Text(stringResource(R.string.ui_rejection, it), color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
                     item {
                         Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            InfoRow("Inicio", formatDateTime(event.startsAt))
-                            InfoRow("Finalización", formatDateTime(event.endsAt))
-                            InfoRow("Lugar", event.location)
-                            InfoRow("Asistencia", "${event.attendeeCount} confirmados · cupo máximo ${event.capacity}")
-                            Text("${state.waitlistCount} personas en espera", color = TextoSecundario)
-                            Text("Si se libera un cupo antes del inicio, la primera persona en espera recibe la confirmación y una notificación.",
+                            InfoRow(stringResource(R.string.ui_start), formatDateTime(event.startsAt, locale))
+                            InfoRow(stringResource(R.string.ui_end), formatDateTime(event.endsAt, locale))
+                            InfoRow(stringResource(R.string.ui_place), event.location)
+                            InfoRow(stringResource(R.string.ui_attendance), stringResource(R.string.ui_attendance_count, event.attendeeCount, event.capacity))
+                            Text(stringResource(R.string.ui_waiting_count, state.waitlistCount), color = TextoSecundario)
+                            Text(stringResource(R.string.ui_waitlist_promotion),
                                 style = MaterialTheme.typography.bodySmall, color = TextoSecundario)
                             HorizontalDivider()
                         }
                     }
                     item {
                         Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("Organiza", style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.ui_organized_by), style = MaterialTheme.typography.titleMedium)
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.size(40.dp).background(Color(0xFFEEDFFF), CircleShape), contentAlignment = Alignment.Center) {
                                     Text(event.organizerName.initials(), color = Color(0xFF6941A5), fontWeight = FontWeight.Bold)
@@ -190,35 +194,35 @@ fun EventDetailScreen(
                                 Spacer(Modifier.width(12.dp))
                                 Text(event.organizerName, Modifier.weight(1f), fontWeight = FontWeight.Medium)
                                 if (state.canFollow) {
-                                    TextButton(onClick = viewModel::toggleFollow, enabled = !state.isSaving) { Text(if (state.isFollowing) "Siguiendo" else "Seguir") }
+                                    TextButton(onClick = viewModel::toggleFollow, enabled = !state.isSaving) { Text(if (state.isFollowing) stringResource(R.string.ui_following) else stringResource(R.string.ui_follow)) }
                                 }
                             }
-                            Text("Descripción", style = MaterialTheme.typography.titleMedium)
-                            Text(event.description.ifBlank { "Sin descripción" }, color = TextoSecundario)
+                            Text(stringResource(R.string.ui_description), style = MaterialTheme.typography.titleMedium)
+                            Text(event.description.ifBlank { stringResource(R.string.ui_no_description) }, color = TextoSecundario)
                             HorizontalDivider()
                         }
                     }
                     item {
                         Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Valoración de la comunidad", style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.ui_community_rating), style = MaterialTheme.typography.titleMedium)
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 FilterChip(
                                     selected = state.myVote == 1, enabled = state.canVote && !state.isSaving,
                                     onClick = { viewModel.vote(1) },
-                                    label = { Text("${state.positiveVotes} positivos") },
+                                    label = { Text(stringResource(R.string.ui_positive_votes, state.positiveVotes)) },
                                     leadingIcon = { Icon(Icons.Default.ThumbUp, contentDescription = null, Modifier.size(18.dp)) }
                                 )
                                 FilterChip(
                                     selected = state.myVote == -1, enabled = state.canVote && !state.isSaving,
                                     onClick = { viewModel.vote(-1) },
-                                    label = { Text("${state.negativeVotes} negativos") },
+                                    label = { Text(stringResource(R.string.ui_negative_votes, state.negativeVotes)) },
                                     leadingIcon = { Icon(Icons.Default.ThumbDown, contentDescription = null, Modifier.size(18.dp)) }
                                 )
                             }
                             Text(when {
-                                state.canVote -> "Toca otra vez tu voto para retirarlo. Solo cuenta un voto por persona."
-                                event.moderationStatus != EventModerationStatus.APPROVED -> "La valoración estará disponible cuando se apruebe la publicación."
-                                else -> "Puedes consultar los votos; el autor no puede votar su propia publicación."
+                                state.canVote -> stringResource(R.string.ui_vote_help)
+                                event.moderationStatus != EventModerationStatus.APPROVED -> stringResource(R.string.ui_votes_pending)
+                                else -> stringResource(R.string.ui_author_vote_help)
                             },
                                 style = MaterialTheme.typography.bodySmall, color = TextoSecundario)
                             HorizontalDivider()
@@ -231,24 +235,24 @@ fun EventDetailScreen(
                                     Text(stringResource(R.string.relaunch_event))
                                 }
                             }
-                            Text("Comentarios (${state.comments.size})", style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.ui_comments_count, state.comments.size), style = MaterialTheme.typography.titleMedium)
                             if (state.canComment) {
                                 OutlinedTextField(
                                     value = state.commentText, onValueChange = viewModel::onCommentChange,
                                     enabled = !state.isSaving,
                                     modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 5,
-                                    label = { Text("Escribe un comentario") },
+                                    label = { Text(stringResource(R.string.ui_write_comment)) },
                                     isError = state.commentError != null,
-                                    supportingText = { Text(state.commentError ?: "${state.commentText.length}/1000") }
+                                    supportingText = { Text(localizedMessage(state.commentError ?: "${state.commentText.length}/1000")) }
                                 )
                                 Button(onClick = viewModel::addComment, modifier = Modifier.align(Alignment.End), enabled = state.commentText.isNotBlank() && !state.isSaving) {
-                                    Text("Publicar comentario")
+                                    Text(stringResource(R.string.ui_publish_comment))
                                 }
                             } else {
-                                Text("Los comentarios estarán disponibles cuando se apruebe la publicación.", color = TextoSecundario)
+                                Text(stringResource(R.string.ui_comments_pending), color = TextoSecundario)
                             }
                             if (!state.canComment) Text(stringResource(R.string.comments_participants_only), style = MaterialTheme.typography.bodySmall)
-                            if (state.comments.isEmpty()) Text("Todavía no hay comentarios.", color = TextoSecundario)
+                            if (state.comments.isEmpty()) Text(stringResource(R.string.ui_no_comments), color = TextoSecundario)
                         }
                     }
                     items(state.comments, key = { it.id }) { comment ->
@@ -257,11 +261,11 @@ fun EventDetailScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
                                         Text(comment.authorName, fontWeight = FontWeight.SemiBold)
-                                        Text(formatDateTime(comment.createdAt), style = MaterialTheme.typography.bodySmall)
+                                        Text(formatDateTime(comment.createdAt, locale), style = MaterialTheme.typography.bodySmall)
                                     }
                                     if (comment.userId == state.currentUserId || state.isModerator) {
                                         IconButton(onClick = { viewModel.requestDeleteComment(comment.id) }, enabled = !state.isSaving) {
-                                            Icon(Icons.Default.DeleteOutline, contentDescription = "Eliminar comentario")
+                                            Icon(Icons.Default.DeleteOutline, contentDescription = stringResource(R.string.ui_delete_comment))
                                         }
                                     }
                                 }
@@ -277,8 +281,8 @@ fun EventDetailScreen(
             Surface(shadowElevation = 8.dp) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(if (event.isFree) "Entrada gratis" else "Entrada: \$${event.price}", fontWeight = FontWeight.SemiBold)
-                        Text("${event.attendeeCount}/${event.capacity} cupos", color = TextoSecundario)
+                        Text(if (event.isFree) stringResource(R.string.ui_free_admission) else stringResource(R.string.ui_paid_admission, event.price), fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.ui_places_count, event.attendeeCount, event.capacity), color = TextoSecundario)
                     }
                     if (state.registrationStatus == null) {
                         Button(
@@ -287,17 +291,17 @@ fun EventDetailScreen(
                             enabled = state.canRegister && !state.isSaving,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B5B7E))
                         ) {
-                            Text(if (event.attendeeCount >= event.capacity) "Unirme a la lista de espera" else "Confirmar asistencia")
+                            Text(if (event.attendeeCount >= event.capacity) stringResource(R.string.ui_join_waitlist) else stringResource(R.string.ui_confirm_attendance))
                         }
                     } else {
                         Text(
-                            if (state.registrationStatus == EventRegistrationStatus.CONFIRMED) "Asistencia confirmada"
-                            else "Lista de espera · posición ${state.waitlistPosition ?: "—"}",
+                            if (state.registrationStatus == EventRegistrationStatus.CONFIRMED) stringResource(R.string.ui_attendance_confirmed)
+                            else stringResource(R.string.ui_waiting_position, state.waitlistPosition?.toString() ?: "—"),
                             fontWeight = FontWeight.Medium
                         )
                         if (state.canCancelRegistration) {
                             OutlinedButton(onClick = viewModel::cancelAttendance, enabled = !state.isSaving, modifier = Modifier.fillMaxWidth()) {
-                                Text("Cancelar inscripción")
+                                Text(stringResource(R.string.ui_cancel_registration))
                             }
                         }
                     }
@@ -308,9 +312,9 @@ fun EventDetailScreen(
     if (state.commentToDelete != null) {
         AlertDialog(
             onDismissRequest = viewModel::dismissDeleteComment,
-            title = { Text("Eliminar comentario") }, text = { Text("El comentario se retirará de esta publicación.") },
-            confirmButton = { TextButton(onClick = viewModel::deleteComment, enabled = !state.isSaving) { Text("Eliminar") } },
-            dismissButton = { TextButton(onClick = viewModel::dismissDeleteComment, enabled = !state.isSaving) { Text("Cancelar") } }
+            title = { Text(stringResource(R.string.ui_delete_comment)) }, text = { Text(stringResource(R.string.ui_delete_comment_help)) },
+            confirmButton = { TextButton(onClick = viewModel::deleteComment, enabled = !state.isSaving) { Text(stringResource(R.string.ui_delete)) } },
+            dismissButton = { TextButton(onClick = viewModel::dismissDeleteComment, enabled = !state.isSaving) { Text(stringResource(R.string.ui_cancel)) } }
         )
     }
 }
@@ -323,5 +327,5 @@ private fun InfoRow(title: String, subtitle: String) {
     }
 }
 
-private fun formatDateTime(timestamp: Long): String =
-    SimpleDateFormat("EEE d MMM yyyy, HH:mm", Locale.forLanguageTag("es-CO")).format(Date(timestamp))
+private fun formatDateTime(timestamp: Long, locale: Locale): String =
+    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT, locale).format(Date(timestamp))

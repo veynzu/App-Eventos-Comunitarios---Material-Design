@@ -1,6 +1,8 @@
 package com.eventoscomunitarios.app.core.data
 
 import com.eventoscomunitarios.app.core.util.toFirebaseMessage
+import com.eventoscomunitarios.app.domain.model.OrganizerVerificationStatus
+import com.eventoscomunitarios.app.domain.repository.MediaRepository
 import com.eventoscomunitarios.app.domain.model.AccountStatus
 import com.eventoscomunitarios.app.domain.model.RepositorySyncState
 import com.eventoscomunitarios.app.domain.model.User
@@ -36,7 +38,8 @@ import kotlinx.coroutines.withContext
 @Singleton
 class FirebaseUserRepository @Inject constructor(
     private val auth: FirebaseAuth,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val mediaRepository: MediaRepository? = null
 ) : UserRepository {
     private val mutableUsers = MutableStateFlow<List<User>>(emptyList())
     private val mutableSyncState = MutableStateFlow(RepositorySyncState(isLoading = true))
@@ -72,15 +75,28 @@ class FirebaseUserRepository @Inject constructor(
         }
     }
 
-    override suspend fun register(user: User, password: String): User {
+    override suspend fun register(user: User, password: String, identityPhotoUri: String?): User {
+        require(user.role != UserRole.ORGANIZER || identityPhotoUri?.startsWith("content://") == true) {
+            "Adjunta una foto de tu cédula para solicitar la verificación"
+        }
         require(user.role != UserRole.ADMINISTRATOR) { "No es posible registrar moderadores desde la aplicación." }
         creatingAccount = true
         var createdAuthUser: FirebaseUser? = null
+        var uploadedIdentity: String? = null
         try {
             createdAuthUser = requireNotNull(auth.createUserWithEmailAndPassword(user.email, password).await().user)
             val profile = user.copy(id = createdAuthUser.uid, email = createdAuthUser.email ?: user.email,
-                registrationDate = Date(), accountStatus = AccountStatus.ACTIVE, pendingEmail = null)
-            firestore.collection("users").document(profile.id).set(profile.toDocument()).await()
+                registrationDate = Date(), accountStatus = AccountStatus.ACTIVE, pendingEmail = null,
+                organizerVerificationStatus = if (user.role == UserRole.ORGANIZER) OrganizerVerificationStatus.PENDING
+                    else OrganizerVerificationStatus.NOT_REQUIRED)
+            val batch = firestore.batch()
+            batch.set(firestore.collection("users").document(profile.id), profile.toDocument())
+            if (profile.role == UserRole.ORGANIZER) {
+                uploadedIdentity = requireNotNull(mediaRepository).uploadImage(profile.id, requireNotNull(identityPhotoUri), "identities")
+                batch.set(firestore.collection("organizerVerifications").document(profile.id),
+                    mapOf("userId" to profile.id, "photoPath" to uploadedIdentity, "submittedAt" to Timestamp.now()))
+            }
+            batch.commit().await()
             // Conserva los demás perfiles recibidos mientras esperábamos la confirmación del registro.
             mutableUsers.value = pendingProfiles.orEmpty()
             pendingProfiles = null
@@ -91,6 +107,8 @@ class FirebaseUserRepository @Inject constructor(
             createdAuthUser?.let {
                 withContext(NonCancellable) {
                     try { withTimeout(5_000) {
+                        try { uploadedIdentity?.let { path -> mediaRepository?.deleteImage(path) } } catch (_: Exception) { }
+                        try { firestore.collection("organizerVerifications").document(it.uid).delete().await() } catch (_: Exception) { }
                         try { firestore.collection("users").document(it.uid).delete().await() } catch (_: Exception) { }
                         it.delete().await()
                     } } catch (_: Exception) { /* El inicio de sesión explicará si falta el perfil. */ }
@@ -102,6 +120,45 @@ class FirebaseUserRepository @Inject constructor(
             creatingAccount = false
             pendingProfiles = null
         }
+    }
+
+    override suspend fun organizerIdentityPath(userId: String): String? =
+        firestore.collection("organizerVerifications").document(userId).get(Source.SERVER).await().getString("photoPath")
+
+    override suspend fun saveOrganizerIdentity(userId: String, photoPath: String): User {
+        requireCurrentUser(userId)
+        val userRef = firestore.collection("users").document(userId)
+        val identityRef = firestore.collection("organizerVerifications").document(userId)
+        val updated = firestore.runTransaction { transaction ->
+            val current = requireNotNull(transaction.get(userRef).toUser()) { "Usuario no encontrado" }
+            require(current.role == UserRole.ORGANIZER && current.accountStatus == AccountStatus.ACTIVE &&
+                current.organizerVerificationStatus != OrganizerVerificationStatus.VERIFIED) { "Esta cuenta no puede enviar documentos" }
+            val next = current.copy(organizerVerificationStatus = OrganizerVerificationStatus.PENDING)
+            transaction.set(identityRef, mapOf("userId" to userId, "photoPath" to photoPath, "submittedAt" to Timestamp.now()))
+            transaction.update(userRef, "organizerVerificationStatus", next.organizerVerificationStatus.name)
+            next
+        }.await()
+        publishProfile(updated)
+        return updated
+    }
+
+    override suspend fun reviewOrganizerIdentity(userId: String, expectedPhotoPath: String, approve: Boolean): User {
+        val actorId = requireNotNull(auth.currentUser?.uid) { "Inicia sesión" }
+        val userRef = firestore.collection("users").document(userId)
+        val updated = firestore.runTransaction { transaction ->
+            val actor = requireNotNull(transaction.get(firestore.collection("users").document(actorId)).toUser())
+            val target = requireNotNull(transaction.get(userRef).toUser()) { "Usuario no encontrado" }
+            val identity = transaction.get(firestore.collection("organizerVerifications").document(userId))
+            require(actor.role == UserRole.ADMINISTRATOR && actor.accountStatus == AccountStatus.ACTIVE) { "Solo un administrador puede verificar organizadores" }
+            require(target.role == UserRole.ORGANIZER && target.organizerVerificationStatus == OrganizerVerificationStatus.PENDING) { "La cuenta ya fue revisada" }
+            require(identity.getString("photoPath") == expectedPhotoPath) { "El documento cambió; vuelve a abrir la revisión" }
+            val next = target.copy(organizerVerificationStatus = if (approve) OrganizerVerificationStatus.VERIFIED else OrganizerVerificationStatus.REJECTED,
+                accountStatus = if (approve) AccountStatus.ACTIVE else AccountStatus.SUSPENDED)
+            transaction.update(userRef, mapOf("organizerVerificationStatus" to next.organizerVerificationStatus.name, "accountStatus" to next.accountStatus.name))
+            next
+        }.await()
+        mutableUsers.value = users.value.filterNot { it.id == userId } + updated
+        return updated
     }
 
     override suspend fun recoverPassword(email: String) { auth.sendPasswordResetEmail(email.trim()).await() }
@@ -120,7 +177,9 @@ class FirebaseUserRepository @Inject constructor(
             require(users.value.any { it.id == firebaseUser.uid && it.role == UserRole.ADMINISTRATOR && it.accountStatus == AccountStatus.ACTIVE }) {
                 "Solo un moderador puede administrar usuarios."
             }
-            reference.update("accountStatus", user.accountStatus.name).await()
+            val changes = mutableMapOf<String, Any>("accountStatus" to user.accountStatus.name)
+            if (user.role == UserRole.ORGANIZER) changes["organizerVerificationStatus"] = user.organizerVerificationStatus.name
+            reference.update(changes).await()
         }
         mutableUsers.value = users.value.filterNot { it.id == user.id } + user
     }
@@ -164,15 +223,25 @@ class FirebaseUserRepository @Inject constructor(
     override suspend fun delete(userId: String) {
         val current = requireCurrentUser(userId)
         val profile = users.value.firstOrNull { it.id == userId }
+        val identityReference = firestore.collection("organizerVerifications").document(userId)
+        val identity = identityReference.get(Source.SERVER).await().data
         deletingAccount = true
         try {
-            firestore.collection("users").document(userId).delete().await()
+            firestore.batch().apply {
+                delete(identityReference)
+                delete(firestore.collection("users").document(userId))
+            }.commit().await()
             try {
                 current.delete().await()
             } catch (error: Exception) {
                 // Auth y Firestore no comparten transacción: conserva el perfil para reintentar.
                 if (profile != null) {
-                    try { firestore.collection("users").document(userId).set(profile.toDocument()).await() } catch (_: Exception) { }
+                    try {
+                        firestore.batch().apply {
+                            set(firestore.collection("users").document(userId), profile.toDocument())
+                            if (identity != null) set(identityReference, identity)
+                        }.commit().await()
+                    } catch (_: Exception) { }
                 }
                 throw error
             }
@@ -271,7 +340,8 @@ class FirebaseUserRepository @Inject constructor(
     private fun User.toDocument(): Map<String, Any?> = mapOf(
         "id" to id, "name" to name, "email" to email, "role" to role.name,
         "registrationDate" to Timestamp(registrationDate), "profilePictureUrl" to profilePictureUrl,
-        "phoneNumber" to phoneNumber, "accountStatus" to accountStatus.name, "pendingEmail" to pendingEmail
+        "phoneNumber" to phoneNumber, "accountStatus" to accountStatus.name, "pendingEmail" to pendingEmail,
+        "organizerVerificationStatus" to organizerVerificationStatus.name
     )
 
     private fun DocumentSnapshot.toUser(): User? {
@@ -283,6 +353,9 @@ class FirebaseUserRepository @Inject constructor(
             getTimestamp("registrationDate")?.toDate() ?: Date(0), getString("profilePictureUrl"),
             getString("phoneNumber"),
             AccountStatus.entries.firstOrNull { it.name == getString("accountStatus") } ?: AccountStatus.SUSPENDED,
-            getString("pendingEmail"))
+            getString("pendingEmail"),
+            OrganizerVerificationStatus.entries.firstOrNull { it.name == getString("organizerVerificationStatus") }
+                ?: if (getString("role") == UserRole.ORGANIZER.name) OrganizerVerificationStatus.PENDING
+                else OrganizerVerificationStatus.NOT_REQUIRED)
     }
 }

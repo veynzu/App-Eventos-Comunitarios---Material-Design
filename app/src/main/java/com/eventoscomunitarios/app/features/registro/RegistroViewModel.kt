@@ -22,6 +22,8 @@ data class RegistroUiState(
     val password: String = "",
     val confirmPassword: String = "",
     val isOrganizer: Boolean = false,
+    val identityPhotoUri: String? = null,
+    val identityPhotoError: String? = null,
     val terminos: Boolean = false,
     val nombreError: String? = null,
     val emailError: String? = null,
@@ -39,6 +41,7 @@ data class RegistroUiState(
                 password.isNotBlank() &&
                 confirmPassword.isNotBlank() &&
                 terminos &&
+                (!isOrganizer || identityPhotoUri != null) &&
                 nombreError == null &&
                 emailError == null &&
                 telefonoError == null &&
@@ -105,7 +108,11 @@ class RegistroViewModel @Inject constructor(private val users: UserUseCases) : V
     }
 
     fun onAccountTypeChange(isOrganizer: Boolean) {
-        _uiState.update { it.copy(isOrganizer = isOrganizer) }
+        _uiState.update { it.copy(isOrganizer = isOrganizer, identityPhotoError = null) }
+    }
+
+    fun onIdentityPhotoSelected(uri: String?) {
+        if (uri != null) _uiState.update { it.copy(identityPhotoUri = uri, identityPhotoError = null) }
     }
 
     fun onTerminosChange(terminos: Boolean) {
@@ -137,7 +144,8 @@ class RegistroViewModel @Inject constructor(private val users: UserUseCases) : V
             email = currentState.email,
             password = currentState.password,
             phoneNumber = currentState.telefono,
-            role = if (currentState.isOrganizer) UserRole.ORGANIZER else UserRole.PARTICIPANT
+            role = if (currentState.isOrganizer) UserRole.ORGANIZER else UserRole.PARTICIPANT,
+            identityPhotoUri = if (currentState.isOrganizer) currentState.identityPhotoUri else null
         )
         _uiState.update { state ->
             state.copy(
@@ -167,6 +175,7 @@ class RegistroViewModel @Inject constructor(private val users: UserUseCases) : V
     private fun validateForm() {
         _uiState.update { state ->
             state.copy(
+                identityPhotoError = if (state.isOrganizer && state.identityPhotoUri == null) "Adjunta una foto de tu cédula" else null,
                 nombreError = validateNombre(state.nombre),
                 emailError = validateEmail(state.email),
                 telefonoError = validateTelefono(state.telefono),

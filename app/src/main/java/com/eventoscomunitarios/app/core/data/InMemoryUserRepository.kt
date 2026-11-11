@@ -1,5 +1,7 @@
 package com.eventoscomunitarios.app.core.data
 
+import com.eventoscomunitarios.app.domain.model.OrganizerVerificationStatus
+import com.eventoscomunitarios.app.domain.model.UserRole
 import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.domain.model.AccountStatus
 import com.eventoscomunitarios.app.domain.model.RepositorySyncState
@@ -12,6 +14,7 @@ import javax.inject.Singleton
 @Singleton
 class InMemoryUserRepository @Inject constructor() : UserRepository {
     private val mutableUsers = MutableStateFlow(demoUsers())
+    private val identityPhotos = mutableMapOf<String, String>()
     private val passwords = demoPasswords().toMutableMap()
     override val users = mutableUsers.asStateFlow()
     override val syncState = MutableStateFlow(RepositorySyncState()).asStateFlow()
@@ -28,6 +31,7 @@ class InMemoryUserRepository @Inject constructor() : UserRepository {
     override suspend fun delete(userId: String) {
         mutableUsers.value = users.value.filterNot { it.id == userId }
         passwords.remove(userId)
+        identityPhotos.remove(userId)
         if (currentUserId.value == userId) signOut()
     }
 
@@ -38,12 +42,34 @@ class InMemoryUserRepository @Inject constructor() : UserRepository {
         return user
     }
 
-    override suspend fun register(user: User, password: String): User {
+    override suspend fun register(user: User, password: String, identityPhotoUri: String?): User {
+        require(user.role != UserRole.ADMINISTRATOR) { "No es posible registrar administradores desde este formulario" }
+        require(user.role != UserRole.ORGANIZER || !identityPhotoUri.isNullOrBlank()) { "Adjunta una foto de tu cédula" }
+        if (identityPhotoUri != null) identityPhotos[user.id] = identityPhotoUri
         require(users.value.none { it.email.equals(user.email, true) }) { "Ya existe una cuenta con este correo" }
-        save(user)
+        val created = user.copy(accountStatus = AccountStatus.ACTIVE,
+            organizerVerificationStatus = if (user.role == UserRole.ORGANIZER) OrganizerVerificationStatus.PENDING
+                else OrganizerVerificationStatus.NOT_REQUIRED)
+        save(created)
         passwords[user.id] = password
         mutableCurrentUserId.value = user.id
-        return user
+        return created
+    }
+
+    override suspend fun organizerIdentityPath(userId: String): String? = identityPhotos[userId]
+    override suspend fun saveOrganizerIdentity(userId: String, photoPath: String): User {
+        val user = requireNotNull(users.value.firstOrNull { it.id == userId })
+        require(user.role == UserRole.ORGANIZER && user.accountStatus == AccountStatus.ACTIVE &&
+            user.organizerVerificationStatus != OrganizerVerificationStatus.VERIFIED)
+        identityPhotos[userId] = photoPath
+        return user.copy(organizerVerificationStatus = OrganizerVerificationStatus.PENDING).also { save(it) }
+    }
+    override suspend fun reviewOrganizerIdentity(userId: String, expectedPhotoPath: String, approve: Boolean): User {
+        val user = requireNotNull(users.value.firstOrNull { it.id == userId })
+        require(user.role == UserRole.ORGANIZER && user.organizerVerificationStatus == OrganizerVerificationStatus.PENDING)
+        require(identityPhotos[userId] == expectedPhotoPath) { "El documento cambió; vuelve a abrir la revisión" }
+        return user.copy(organizerVerificationStatus = if (approve) OrganizerVerificationStatus.VERIFIED else OrganizerVerificationStatus.REJECTED,
+            accountStatus = if (approve) AccountStatus.ACTIVE else AccountStatus.SUSPENDED).also { save(it) }
     }
 
     override suspend fun recoverPassword(email: String) { /* Doble de prueba; no envía mensajes. */ }

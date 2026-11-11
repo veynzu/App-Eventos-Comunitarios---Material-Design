@@ -1,0 +1,6 @@
+<resources>
+    <string name="moderation_pending_tab">Pendientes</string>
+    <string name="moderation_approved_tab">Aprobados</string>
+    <string name="moderation_rejected_tab">Rechazados</string>
+    <string name="ui_retry">Reintentar</string>
+</resources>

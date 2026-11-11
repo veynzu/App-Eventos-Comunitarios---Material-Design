@@ -48,7 +48,7 @@ fun EventMap(
         return
     }
 
-    val zoom = if (radiusKm <= 5) 13.5 else 12.5
+    val zoom = (13.5 - kotlin.math.log2(radiusKm.coerceAtLeast(1) / 5.0)).coerceIn(8.0, 16.0)
     val mapViewportState = rememberMapViewportState(key = "radius-$radiusKm") {
         setCameraOptions {
             center(Point.fromLngLat(center.longitude, center.latitude))
@@ -100,7 +100,7 @@ private fun EventMapPreviewPlaceholder(modifier: Modifier) {
         modifier = modifier.fillMaxWidth().height(286.dp).background(Color(0xFFE7ECE7)),
         contentAlignment = Alignment.Center
     ) {
-        Text("Mapa de eventos · Armenia", color = Color(0xFF2B638B))
+        Text(stringResource(R.string.ui_map_title), color = Color(0xFF2B638B))
     }
 }
 
@@ -116,7 +116,7 @@ private fun EventMapConfigurationError(modifier: Modifier) {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "Falta configurar MAPBOX_ACCESS_TOKEN en local.properties.",
+            text = stringResource(R.string.ui_map_config),
             color = MaterialTheme.colorScheme.onErrorContainer
         )
     }

@@ -1,5 +1,12 @@
 package com.eventoscomunitarios.app.features.login
 
+import com.eventoscomunitarios.app.core.util.localizedMessage
+
+import androidx.compose.ui.platform.LocalContext
+
+import androidx.compose.ui.res.stringResource
+import com.eventoscomunitarios.app.R
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -79,6 +86,7 @@ fun LoginScreen(
     onCrearCuenta: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(state.loginResult) {
@@ -90,7 +98,7 @@ fun LoginScreen(
             }
 
             is RequestResult.Failure -> {
-                snackbarHostState.showSnackbar(result.message)
+                snackbarHostState.showSnackbar(context.localizedMessage(result.message))
                 viewModel.clearLoginResult()
             }
 
@@ -172,7 +180,7 @@ private fun LoginContent(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Bienvenido de vuelta",
+                    text = stringResource(R.string.ui_welcome),
                     fontSize = 22.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = TextoPrincipal,
@@ -182,7 +190,7 @@ private fun LoginContent(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "Inicia sesión para descubrir eventos en tu zona",
+                    text = stringResource(R.string.ui_sign_in_help),
                     fontSize = 13.sp,
                     color = TextoSecundario,
                     modifier = Modifier.fillMaxWidth()
@@ -194,10 +202,10 @@ private fun LoginContent(
                     value = state.email,
                     onValueChange = onEmailChange,
                     label = {
-                        Text("Correo electrónico")
+                        Text(stringResource(R.string.ui_email))
                     },
                     placeholder = {
-                        Text("example@example.com")
+                        Text(stringResource(R.string.ui_example_email))
                     },
                     leadingIcon = {
                         IconoCorreo()
@@ -205,7 +213,7 @@ private fun LoginContent(
                     isError = state.emailError != null,
                     supportingText = {
                         state.emailError?.let { error ->
-                            Text(error)
+                            Text(localizedMessage(error))
                         }
                     },
                     singleLine = true,
@@ -229,7 +237,7 @@ private fun LoginContent(
                     value = state.password,
                     onValueChange = onPasswordChange,
                     label = {
-                        Text("Password")
+                        Text(stringResource(R.string.ui_password))
                     },
                     leadingIcon = {
                         IconoCandado()
@@ -254,9 +262,9 @@ private fun LoginContent(
                     isError = state.passwordError != null,
                     supportingText = {
                         if (state.passwordError != null) {
-                            Text(state.passwordError)
+                            Text(localizedMessage(state.passwordError))
                         } else {
-                            Text("Mínimo 8 caracteres")
+                            Text(stringResource(R.string.ui_login_password_hint))
                         }
                     },
                     singleLine = true,
@@ -297,7 +305,7 @@ private fun LoginContent(
                         Spacer(modifier = Modifier.width(4.dp))
 
                         Text(
-                            text = "Recordarme",
+                            text = stringResource(R.string.ui_remember_me),
                             fontSize = 12.sp,
                             color = TextoSecundario
                         )
@@ -310,7 +318,7 @@ private fun LoginContent(
                         )
                     ) {
                         Text(
-                            text = "¿Olvidaste tu contraseña?",
+                            text = stringResource(R.string.ui_forgot_password),
                             fontSize = 12.sp,
                             color = azulPrincipal
                         )
@@ -332,7 +340,7 @@ private fun LoginContent(
                     )
                 ) {
                     Text(
-                        text = "Iniciar sesión",
+                        text = stringResource(R.string.ui_sign_in),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -351,7 +359,7 @@ private fun LoginContent(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "¿No tienes cuenta?",
+                    text = stringResource(R.string.ui_no_account),
                     fontSize = 13.sp,
                     color = TextoSecundario,
                     textAlign = TextAlign.Center
@@ -361,7 +369,7 @@ private fun LoginContent(
                     onClick = onCrearCuenta
                 ) {
                     Text(
-                        text = "Crear cuenta",
+                        text = stringResource(R.string.ui_create_account),
                         fontSize = 14.sp,
                         color = azulPrincipal
                     )

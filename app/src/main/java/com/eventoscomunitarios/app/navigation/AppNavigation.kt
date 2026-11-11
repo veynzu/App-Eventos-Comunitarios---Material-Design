@@ -36,6 +36,9 @@ import com.eventoscomunitarios.app.features.login.LoginScreen
 import com.eventoscomunitarios.app.features.onboarding.OnboardingScreen
 import com.eventoscomunitarios.app.features.recuperar_contrasenia.RecuperarContrasenaScreen
 import com.eventoscomunitarios.app.features.registro.RegistroScreen
+import androidx.compose.ui.res.stringResource
+import com.eventoscomunitarios.app.R
+import com.eventoscomunitarios.app.core.util.localizedMessage
 
 /** Grafo principal: acceso público y entrada al dashboard autenticado. */
 @Composable
@@ -81,9 +84,9 @@ fun AppNavigation(sessionViewModel: SessionViewModel = hiltViewModel()) {
             } else if (session.error != null && session.userId != null) {
                 Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                    Text(session.error.orEmpty())
-                    Button(onClick = sessionViewModel::retry) { Text("Reintentar") }
-                    TextButton(onClick = signOut) { Text("Cerrar sesión") }
+                    Text(localizedMessage(session.error.orEmpty()))
+                    Button(onClick = sessionViewModel::retry) { Text(stringResource(R.string.ui_retry)) }
+                    TextButton(onClick = signOut) { Text(stringResource(R.string.ui_sign_out)) }
                 }
             } else {
                 NavHost(

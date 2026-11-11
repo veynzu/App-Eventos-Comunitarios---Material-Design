@@ -20,7 +20,8 @@ internal fun demoUsers(): List<User> = listOf(
 private fun demoUser(id: String, name: String, email: String, role: UserRole, phone: String, status: AccountStatus = AccountStatus.ACTIVE) = User(
     id = id, name = name, email = email, role = role,
     registrationDate = GregorianCalendar(2026, Calendar.AUGUST, 1).time,
-    phoneNumber = phone, accountStatus = status
+    phoneNumber = phone, accountStatus = status,
+    organizerVerificationStatus = if (role == UserRole.ORGANIZER) OrganizerVerificationStatus.VERIFIED else OrganizerVerificationStatus.NOT_REQUIRED
 )
 
 internal fun demoPasswords() = mapOf(

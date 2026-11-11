@@ -93,10 +93,10 @@ class NavigationFlowTest {
     }
 
     @Test
-    fun participantSeesOnlyOwnEnrollmentsAndCanPublish() {
+    fun participantSeesOwnEnrollmentsAndCannotPublish() {
         val participant = users.first { it.id == "participant-ana" }
         loginAs(participant.id)
-        compose.onNodeWithTag("create_event_button").assertIsDisplayed()
+        compose.onNodeWithTag("create_event_button").assertDoesNotExist()
 
         compose.onNodeWithText("Mis eventos").performClick()
         waitForScreen("Mis eventos")

@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.eventoscomunitarios.app.R
+import com.eventoscomunitarios.app.core.util.localizedMessage
 import com.eventoscomunitarios.app.domain.model.SearchLocation
 
 @Composable
@@ -31,6 +32,6 @@ fun SearchLocationControls(location: SearchLocation, onChoose: () -> Unit, onLoc
             DeviceLocationButton(onLocate)
         }
         if (location.isLocating) LinearProgressIndicator(Modifier.fillMaxWidth())
-        location.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        location.message?.let { Text(localizedMessage(it), style = MaterialTheme.typography.bodySmall) }
     }
 }

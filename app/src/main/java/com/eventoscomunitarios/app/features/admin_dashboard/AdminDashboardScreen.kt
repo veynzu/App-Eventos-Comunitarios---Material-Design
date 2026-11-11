@@ -19,6 +19,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.res.stringResource
+import com.eventoscomunitarios.app.core.components.localizedName
+import androidx.compose.ui.platform.LocalContext
+import com.eventoscomunitarios.app.core.util.localizedMessage
+import com.eventoscomunitarios.app.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -47,7 +52,7 @@ fun AdminDashboardScreen(
     val state by viewModel.uiState.collectAsState()
     when (val result = state.loadResult) {
         RequestResult.Loading -> return LoadingIndicator()
-        is RequestResult.Failure -> return Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(result.message) }
+        is RequestResult.Failure -> return Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(localizedMessage(result.message)) }
         RequestResult.Success -> Unit
     }
     Column(Modifier.fillMaxSize()) {
@@ -59,53 +64,61 @@ fun AdminDashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Panel de control", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-                        IconButton(onClick = onNotificationsClick) { Icon(Icons.Default.Notifications, "Notificaciones") }
+                        Text(stringResource(R.string.verification_ui_dashboard), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                        IconButton(onClick = onNotificationsClick) { Icon(Icons.Default.Notifications, stringResource(R.string.verification_ui_notifications)) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = onHomeClick) { Text("Explorar eventos") }
-                        OutlinedButton(onClick = onCreateEventClick) { Text("Crear evento") }
+                        OutlinedButton(onClick = onHomeClick) { Text(stringResource(R.string.verification_ui_explore)) }
+                        OutlinedButton(onClick = onCreateEventClick) { Text(stringResource(R.string.verification_ui_create_event)) }
+                    }
+                }
+                item {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(stringResource(R.string.verification_pending_count, state.pendingOrganizers), style = MaterialTheme.typography.titleMedium)
+                            TextButton(onClick = onUsersClick) { Text(stringResource(R.string.verification_review_organizers)) }
+                        }
                     }
                 }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        MetricCard(state.activeEvents, "Eventos activos", Modifier.weight(1f))
-                        MetricCard(state.pendingEvents.size, "Por aprobar", Modifier.weight(1f))
+                        MetricCard(state.activeEvents, stringResource(R.string.verification_ui_active_events), Modifier.weight(1f))
+                        MetricCard(state.pendingEvents.size, stringResource(R.string.verification_ui_awaiting_approval), Modifier.weight(1f))
                     }
                 }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        MetricCard(state.totalUsers, "Usuarios", Modifier.weight(1f))
-                        MetricCard(state.totalAttendance, "Asistencias confirmadas", Modifier.weight(1f))
+                        MetricCard(state.totalUsers, stringResource(R.string.verification_ui_users), Modifier.weight(1f))
+                        MetricCard(state.totalAttendance, stringResource(R.string.verification_ui_attendance), Modifier.weight(1f))
                     }
                 }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        MetricCard(state.waitingCount, "En lista de espera", Modifier.weight(1f))
-                        MetricCard(state.finishedCount, "Finalizados", Modifier.weight(1f))
+                        MetricCard(state.waitingCount, stringResource(R.string.verification_ui_waitlist), Modifier.weight(1f))
+                        MetricCard(state.finishedCount, stringResource(R.string.verification_ui_finished), Modifier.weight(1f))
                     }
                 }
                 item {
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Publicaciones por categoría", style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.verification_ui_categories), style = MaterialTheme.typography.titleMedium)
                             state.categoryCounts.forEach { (category, count) ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(category.displayName)
+                                    Text(category.localizedName())
                                     Text(count.toString())
                                 }
                             }
-                            Text("Rechazados: ${state.rejectedCount}", style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.verification_ui_rejected_count, state.rejectedCount), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Requieren tu atención", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = onModerationClick) { Text("Ver todo") }
+                        Text(stringResource(R.string.verification_ui_attention), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        TextButton(onClick = onModerationClick) { Text(stringResource(R.string.verification_ui_view_all)) }
                     }
                 }
-                if (state.pendingEvents.isEmpty()) item { Text("No hay eventos pendientes de moderación.") }
+                if (state.pendingEvents.isEmpty()) item { Text(stringResource(R.string.verification_ui_no_pending)) }
                 items(state.pendingEvents.take(3), key = { it.id }) { event ->
                     ModerationEventCard(event = event, compact = true,
                         onReject = { viewModel.reject(event.id) }, onDetail = { onEventDetail(event.id) },
@@ -116,16 +129,16 @@ fun AdminDashboardScreen(
     }
     if (state.actionResult == RequestResult.Loading && state.rejectionEvent == null) LoadingIndicator()
     state.rejectionEvent?.let { event ->
-        ModerationActionDialog(title = "Rechazar evento", description = "${event.title}: explica qué debe corregir el autor.",
-            reason = state.rejectionReason, error = if (state.actionResult == RequestResult.Loading) "Guardando…" else state.reasonError,
+        ModerationActionDialog(title = stringResource(R.string.verification_ui_reject_event), description = stringResource(R.string.verification_ui_rejection_help, event.title),
+            reason = state.rejectionReason, error = if (state.actionResult == RequestResult.Loading) stringResource(R.string.verification_ui_saving) else state.reasonError,
             onReasonChange = viewModel::onReasonChange, onConfirm = viewModel::confirmRejection,
             onDismiss = viewModel::dismissRejection)
     }
     if (state.actionResult != null && state.actionResult != RequestResult.Loading && state.rejectionEvent == null) {
         AlertDialog(onDismissRequest = viewModel::clearActionResult,
-            title = { Text(if (state.actionResult == RequestResult.Success) "Acción completada" else "No se pudo completar") },
-            text = { Text(state.actionMessage.orEmpty()) },
-            confirmButton = { TextButton(onClick = viewModel::clearActionResult) { Text("Aceptar") } },
+            title = { Text(if (state.actionResult == RequestResult.Success) stringResource(R.string.verification_ui_completed) else stringResource(R.string.verification_ui_failed)) },
+            text = { Text(localizedMessage(state.actionMessage.orEmpty())) },
+            confirmButton = { TextButton(onClick = viewModel::clearActionResult) { Text(stringResource(R.string.verification_ui_accept)) } },
             modifier = Modifier.testTag(if (state.actionResult == RequestResult.Success) "admin_action_success" else "admin_action_error"))
     }
 }

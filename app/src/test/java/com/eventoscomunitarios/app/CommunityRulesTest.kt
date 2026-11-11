@@ -42,6 +42,9 @@ class CommunityRulesTest {
     )
 
     private suspend fun published(authorId: String = carlos): Event {
+        // Las pruebas sociales pueden usar otra autora, siempre verificada para publicar.
+        if (authorId != carlos) usersRepository.save(users.findUser(authorId)!!.copy(
+            role = UserRole.ORGANIZER, organizerVerificationStatus = OrganizerVerificationStatus.VERIFIED))
         val created = events.create(authorId, draft()).getOrThrow()
         events.moderate(admin, created.id, EventModerationStatus.APPROVED).getOrThrow()
         return events.findEvent(created.id)!!
@@ -54,8 +57,8 @@ class CommunityRulesTest {
     }
 
     @Test fun creationUsesCurrentAuthorAndAlwaysRequiresModeration() = runBlocking {
-        val created = events.create(ana, draft()).getOrThrow()
-        assertEquals(ana, created.organizerId)
+        val created = events.create(carlos, draft()).getOrThrow()
+        assertEquals(carlos, created.organizerId)
         assertEquals("Nuevo encuentro", created.title)
         assertEquals(EventModerationStatus.PENDING, created.moderationStatus)
         assertEquals(0, created.attendeeCount)
@@ -63,26 +66,26 @@ class CommunityRulesTest {
         assertNull(created.rejectionReason)
         assertTrue(community.notifications.value.any { it.userId == admin && it.eventId == created.id })
         assertFalse(events.canView(laura, created))
-        assertTrue(events.canView(ana, created))
+        assertTrue(events.canView(carlos, created))
     }
 
     @Test fun invalidDatesAndMissingDescriptionDoNotCreatePublications() = runBlocking {
         val before = events.events.value.size
-        assertTrue(events.create(ana, draft().copy(endsAt = 1L)).isFailure)
-        assertTrue(events.create(ana, draft().copy(startsAt = 1L)).isFailure)
-        assertTrue(events.create(ana, draft().copy(description = " ")).isFailure)
-        assertTrue(events.create(ana, draft().copy(capacity = 0)).isFailure)
-        assertTrue(events.create(ana, draft().copy(price = -1)).isFailure)
+        assertTrue(events.create(carlos, draft().copy(endsAt = 1L)).isFailure)
+        assertTrue(events.create(carlos, draft().copy(startsAt = 1L)).isFailure)
+        assertTrue(events.create(carlos, draft().copy(description = " ")).isFailure)
+        assertTrue(events.create(carlos, draft().copy(capacity = 0)).isFailure)
+        assertTrue(events.create(carlos, draft().copy(price = -1)).isFailure)
         assertEquals(before, events.events.value.size)
     }
 
     @Test fun rejectionRequiresModeratorAndReasonAndNotifiesAuthor() = runBlocking {
-        val event = events.create(ana, draft()).getOrThrow()
+        val event = events.create(carlos, draft()).getOrThrow()
         assertTrue(events.moderate(laura, event.id, EventModerationStatus.APPROVED).isFailure)
         assertTrue(events.moderate(admin, event.id, EventModerationStatus.REJECTED, "  ").isFailure)
         events.moderate(admin, event.id, EventModerationStatus.REJECTED, "Completa la dirección").getOrThrow()
         assertEquals("Completa la dirección", events.findEvent(event.id)?.rejectionReason)
-        assertTrue(community.notifications.value.any { it.userId == ana && it.message.contains("Completa la dirección") })
+        assertTrue(community.notifications.value.any { it.userId == carlos && it.message.contains("Completa la dirección") })
         assertTrue(events.moderate(admin, event.id, EventModerationStatus.APPROVED).isFailure)
     }
 

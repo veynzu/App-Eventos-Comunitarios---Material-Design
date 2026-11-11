@@ -1,5 +1,7 @@
 package com.eventoscomunitarios.app.core.components
 
+import com.eventoscomunitarios.app.core.util.localizedMessage
+
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Intent
@@ -53,7 +55,7 @@ fun EventLocationField(address: String, point: Coordinates?, error: String?, onC
             Text(if (point == null) stringResource(R.string.choose_location) else address)
         }
         if (point != null) Text("%.5f, %.5f".format(Locale.US, point.latitude, point.longitude), style = MaterialTheme.typography.bodySmall)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        error?.let { Text(localizedMessage(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -71,7 +73,7 @@ fun EventTextField(
     OutlinedTextField(
         value = value, onValueChange = onValueChange, label = { Text(label) },
         isError = error != null,
-        supportingText = error?.let { message -> { Text(message) } },
+        supportingText = error?.let { message -> { Text(localizedMessage(message)) } },
         keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text),
         minLines = minLines, singleLine = minLines == 1, enabled = enabled,
         modifier = modifier.fillMaxWidth()
@@ -81,16 +83,16 @@ fun EventTextField(
 @Composable
 fun EventCategorySelector(value: String, error: String?, onSelect: (String) -> Unit) {
     Column {
-        Text("Categoría", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.ui_category), style = MaterialTheme.typography.labelLarge)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             EventCategory.entries.forEach { category ->
                 FilterChip(
                     selected = value.equals(category.displayName, true) || value.equals(category.name, true),
-                    onClick = { onSelect(category.displayName) }, label = { Text(category.displayName) }
+                    onClick = { onSelect(category.displayName) }, label = { Text(category.localizedName()) }
                 )
             }
         }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        error?.let { Text(localizedMessage(it), color = MaterialTheme.colorScheme.error) }
     }
 }
 
@@ -111,12 +113,12 @@ fun EventDateTimeFields(
     Column {
         Text(label, style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            EventPickerField(date, "Fecha (DD/MM/AAAA)", dateError, Modifier.weight(1f)) {
+            EventPickerField(date, stringResource(R.string.ui_date), dateError, Modifier.weight(1f)) {
                 DatePickerDialog(context, { _, year, month, day ->
                     onDateChange(String.format(Locale.ROOT, "%02d/%02d/%04d", day, month + 1, year))
                 }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
             }
-            EventPickerField(time, "Hora (24 h)", timeError, Modifier.weight(1f)) {
+            EventPickerField(time, stringResource(R.string.ui_time), timeError, Modifier.weight(1f)) {
                 TimePickerDialog(context, { _, hour, minute ->
                     onTimeChange(String.format(Locale.ROOT, "%02d:%02d", hour, minute))
                 }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show()
@@ -131,7 +133,7 @@ private fun EventPickerField(value: String, label: String, error: String?, modif
         OutlinedTextField(
             value = value, onValueChange = {}, readOnly = true,
             label = { Text(label) }, isError = error != null,
-            supportingText = error?.let { message -> { Text(message) } },
+            supportingText = error?.let { message -> { Text(localizedMessage(message)) } },
             modifier = Modifier.fillMaxWidth()
         )
         Box(Modifier.matchParentSize().clickable(onClick = onClick))
@@ -150,12 +152,12 @@ fun EventPhotoSelector(photoUri: String?, onPhotoSelected: (String?) -> Unit) {
         }
     }
     if (!photoUri.isNullOrBlank()) {
-        RemoteImage(photoUri, "Foto seleccionada", Modifier.fillMaxWidth().height(180.dp))
-        TextButton(onClick = { onPhotoSelected(null) }) { Text("Quitar foto") }
+        RemoteImage(photoUri, stringResource(R.string.ui_selected_photo), Modifier.fillMaxWidth().height(180.dp))
+        TextButton(onClick = { onPhotoSelected(null) }) { Text(stringResource(R.string.ui_remove_photo)) }
     }
     OutlinedButton(
         onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-    ) { Text(if (photoUri == null) "Agregar foto (opcional)" else "Cambiar foto seleccionada") }
-    Text("Imagen de hasta 10 MB", style = MaterialTheme.typography.bodySmall)
+    ) { Text(if (photoUri == null) stringResource(R.string.ui_add_photo) else stringResource(R.string.ui_change_photo)) }
+    Text(stringResource(R.string.ui_photo_size), style = MaterialTheme.typography.bodySmall)
 }

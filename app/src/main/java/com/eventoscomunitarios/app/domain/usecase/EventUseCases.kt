@@ -23,7 +23,7 @@ class EventUseCases @Inject constructor(
     val syncState = eventRepository.syncState
 
     fun findEvent(id: Int): Event? = events.value.firstOrNull { it.id == id && !it.isDeleted }
-    fun canPublish(userId: String): Boolean = activeUser(userId) != null
+    fun canPublish(userId: String): Boolean = activeUser(userId)?.canCreateEvents == true
     fun canManage(userId: String, event: Event): Boolean = activeUser(userId)?.let { manages(it, event) } == true
     fun canView(userId: String, event: Event): Boolean = !event.isDeleted && activeUser(userId) != null &&
         (event.moderationStatus == EventModerationStatus.APPROVED || canManage(userId, event) ||
@@ -32,7 +32,7 @@ class EventUseCases @Inject constructor(
         event.organizerId != userId && event.moderationStatus == EventModerationStatus.APPROVED &&
         !event.isFinished && event.startsAt > System.currentTimeMillis()
 
-    fun canRelaunch(userId: String, event: Event): Boolean = activeUser(userId) != null &&
+    fun canRelaunch(userId: String, event: Event): Boolean = canPublish(userId) &&
         event.organizerId == userId && !event.isDeleted && event.hasEnded && event.moderationStatus == EventModerationStatus.APPROVED
 
     suspend fun create(userId: String, event: Event): Result<Event> = firebaseResult { createEdition(userId, event, null) }
@@ -45,6 +45,7 @@ class EventUseCases @Inject constructor(
 
     private suspend fun createEdition(userId: String, event: Event, previous: Event?): Event {
         val author = requireActiveUser(userId)
+        require(author.canCreateEvents) { "Solo un organizador verificado o un administrador puede publicar eventos" }
         validate(event)
         val id = eventRepository.nextId()
         val photo = uploadPhoto(userId, event.photoUri)
@@ -67,12 +68,13 @@ class EventUseCases @Inject constructor(
 
     suspend fun update(userId: String, event: Event): Result<Event> = firebaseResult {
         val author = requireActiveUser(userId)
+        require(author.canCreateEvents) { "Solo un organizador verificado o un administrador puede editar eventos" }
         validate(event)
         val photo = uploadPhoto(userId, event.photoUri)
         val change = try {
             mutate(event.id, author) { before, actor, _ ->
                 val current = before.event
-                require(!current.isDeleted && manages(actor, current)) { "No puedes editar esta publicación" }
+                require(actor.canCreateEvents && !current.isDeleted && manages(actor, current)) { "No puedes editar esta publicación" }
                 require(!current.isFinished && current.startsAt > System.currentTimeMillis()) { "El evento ya comenzó o finalizó" }
                 val confirmed = before.registrations.count { it.status == EventRegistrationStatus.CONFIRMED }
                 require(event.capacity >= confirmed) { "El cupo no puede ser menor que las asistencias confirmadas" }

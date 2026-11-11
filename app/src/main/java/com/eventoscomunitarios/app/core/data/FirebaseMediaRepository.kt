@@ -28,7 +28,7 @@ class FirebaseMediaRepository @Inject constructor(
 ) : MediaRepository {
     override suspend fun uploadImage(userId: String, localUri: String, folder: String): String {
         require(auth.currentUser?.uid == userId) { "Inicia sesión para subir una imagen." }
-        require(folder == "events" || folder == "profiles") { "Destino de imagen inválido." }
+        require(folder in setOf("events", "profiles", "identities")) { "Destino de imagen inválido." }
         val uri = Uri.parse(localUri)
         require(uri.scheme == "content") { "Selecciona una imagen desde el dispositivo." }
         val (bytes, mimeType) = withContext(Dispatchers.IO) {
@@ -59,7 +59,9 @@ class FirebaseMediaRepository @Inject constructor(
         val upload = reference.putBytes(bytes, metadata)
         try {
             upload.await()
-            return reference.downloadUrl.await().toString()
+            // Los documentos de identidad se leen con el SDK autenticado, sin publicar downloadUrl.
+            return if (folder == "identities") "gs://${reference.bucket}/${reference.path.trimStart('/')}"
+            else reference.downloadUrl.await().toString()
         } catch (error: Exception) {
             upload.cancel()
             // Si la descarga de la URL o la pantalla falla, no conservar una imagen sin documento.
@@ -75,7 +77,7 @@ class FirebaseMediaRepository @Inject constructor(
         if (url.isBlank()) return
         val reference = storage.imageReference(url)
         require(reference.bucket == storage.reference.bucket &&
-            (reference.path.startsWith("/events/") || reference.path.startsWith("/profiles/"))) {
+            (reference.path.startsWith("/events/") || reference.path.startsWith("/profiles/") || reference.path.startsWith("/identities/"))) {
             "La imagen no pertenece al almacenamiento de la aplicación."
         }
         try {
@@ -83,6 +85,15 @@ class FirebaseMediaRepository @Inject constructor(
         } catch (error: StorageException) {
             if (error.errorCode != StorageException.ERROR_OBJECT_NOT_FOUND) throw error
         }
+    }
+
+    override suspend fun readPrivateImage(path: String): ByteArray {
+        require(path.startsWith("gs://")) { "Referencia de documento inválida" }
+        val reference = storage.getReferenceFromUrl(path)
+        require(reference.bucket == storage.reference.bucket && reference.path.startsWith("/identities/")) {
+            "El documento no pertenece al almacenamiento de la aplicación"
+        }
+        return reference.getBytes(MAX_IMAGE_BYTES.toLong()).await()
     }
 
     private companion object { const val MAX_IMAGE_BYTES = 10 * 1024 * 1024 }

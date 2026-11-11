@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.AccountStatus
 import com.eventoscomunitarios.app.domain.model.User
+import com.eventoscomunitarios.app.domain.model.OrganizerIdentity
+import com.eventoscomunitarios.app.domain.model.OrganizerVerificationStatus
 import com.eventoscomunitarios.app.domain.model.UserRole
 import com.eventoscomunitarios.app.domain.usecase.UserUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,7 +23,8 @@ import kotlinx.coroutines.flow.merge
 enum class UserFilter(val label: String) {
     ALL("Todos"),
     PARTICIPANTS("Clientes"),
-    ORGANIZERS("Organizadores")
+    ORGANIZERS("Organizadores"),
+    PENDING("Por verificar")
 }
 
 data class AdminUsersUiState(
@@ -31,7 +34,10 @@ data class AdminUsersUiState(
     val selectedFilter: UserFilter = UserFilter.ALL,
     val users: List<User> = emptyList(),
     val feedback: String? = null,
-    val isSaving: Boolean = false
+    val isSaving: Boolean = false,
+    val reviewingUser: User? = null,
+    val identity: OrganizerIdentity? = null,
+    val identityResult: RequestResult? = null
 ) {
     val visibleUsers: List<User>
         get() = users.filter { user ->
@@ -40,6 +46,7 @@ data class AdminUsersUiState(
                     UserFilter.ALL -> true
                     UserFilter.PARTICIPANTS -> user.role == UserRole.PARTICIPANT
                     UserFilter.ORGANIZERS -> user.role == UserRole.ORGANIZER
+                    UserFilter.PENDING -> user.role == UserRole.ORGANIZER && user.organizerVerificationStatus == OrganizerVerificationStatus.PENDING
                 } && (query.isBlank() || user.name.contains(query, true) || user.email.contains(query, true))
         }
     val suspendedCount: Int get() = users.count { it.accountStatus == AccountStatus.SUSPENDED }
@@ -98,6 +105,39 @@ class AdminUsersViewModel @Inject constructor(
                 feedback = if (updated.accountStatus == AccountStatus.SUSPENDED) "Usuario suspendido" else "Usuario reactivado"
             )
         }
+        }
+    }
+
+    fun reviewIdentity(targetUserId: String) {
+        if (_uiState.value.isSaving) return
+        val target = userUseCases.findUser(targetUserId) ?: return
+        _uiState.update { it.copy(reviewingUser = target, identity = null, identityResult = RequestResult.Loading) }
+        viewModelScope.launch {
+            val result = userUseCases.loadOrganizerIdentity(userId, targetUserId)
+            _uiState.update {
+                if (it.reviewingUser?.id != targetUserId) it
+                else it.copy(identity = result.getOrNull(), identityResult = result.fold(
+                    onSuccess = { RequestResult.Success }, onFailure = { RequestResult.Failure(it.message.orEmpty()) }))
+            }
+        }
+    }
+
+    fun dismissIdentity() {
+        if (!_uiState.value.isSaving) _uiState.update { it.copy(reviewingUser = null, identity = null, identityResult = null) }
+    }
+
+    fun confirmIdentity(approve: Boolean) {
+        val state = _uiState.value
+        val target = state.reviewingUser ?: return
+        val identity = state.identity ?: return
+        if (state.isSaving || state.identityResult != RequestResult.Success) return
+        _uiState.update { it.copy(isSaving = true) }
+        viewModelScope.launch {
+            val result = userUseCases.reviewOrganizerIdentity(userId, target.id, identity.photoPath, approve)
+            _uiState.update { it.copy(isSaving = false,
+                reviewingUser = if (result.isSuccess) null else it.reviewingUser,
+                identity = if (result.isSuccess) null else it.identity,
+                feedback = result.exceptionOrNull()?.message ?: if (approve) "Organizador verificado" else "Cuenta bloqueada") }
         }
     }
 

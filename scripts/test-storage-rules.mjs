@@ -53,6 +53,23 @@ async function check(label, pending, expected) {
 
 const alice = await account('alice@example.test');
 const bob = await account('bob@example.test');
+const moderator = await account('moderator@example.test');
+assert.equal(process.env.FIRESTORE_EMULATOR_HOST, '127.0.0.1:18080');
+const moderatorProfile = await fetch(`http://127.0.0.1:18080/v1/projects/demo-share-you-storage-rules/databases/(default)/documents/users/${moderator.localId}`, {
+  method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer owner' },
+  body: JSON.stringify({ fields: { role: { stringValue: 'ADMINISTRATOR' }, accountStatus: { stringValue: 'ACTIVE' } } })
+});
+assert.equal(moderatorProfile.status, 200);
+const identity = `identities/${alice.localId}/identity-photo`;
+await check('Subir documento propio', upload(identity, alice), 200);
+await check('Leer documento propio con sesion', object(identity, alice, 'GET', true), 200);
+await check('Otro usuario no puede leer la cedula', object(identity, bob, 'GET', true), 403);
+await check('Documento privado requiere sesion', object(identity, null, 'GET', true), 403);
+await check('Administrador puede revisar la cedula', object(identity, moderator, 'GET', true), 200);
+await check('No subir cedula en carpeta ajena', upload(`identities/${bob.localId}/forged`, alice), 403);
+await check('No sobrescribir cedula enviada', upload(identity, alice), 403);
+await check('No borrar cedula ajena', object(identity, bob, 'DELETE'), 403);
+await check('Borrar documento propio', object(identity, alice, 'DELETE'), 204);
 const profile = `profiles/${alice.localId}/photo`;
 const event = `events/${alice.localId}/photo`;
 await check('Subir foto de perfil propia', upload(profile, alice), 200);

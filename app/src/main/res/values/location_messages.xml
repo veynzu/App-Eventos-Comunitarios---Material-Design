@@ -1,0 +1,5 @@
+<resources>
+    <string name="location_current_unavailable">No se pudo obtener la ubicación actual. Se muestra Armenia; toca el mapa para elegir el sitio.</string>
+    <string name="location_search_unavailable">No se pudo obtener la ubicación. Puedes elegir otro punto; se muestra Armenia.</string>
+    <string name="location_address_unavailable">No se encontró una dirección. Escribe la dirección o referencia del punto seleccionado.</string>
+</resources>

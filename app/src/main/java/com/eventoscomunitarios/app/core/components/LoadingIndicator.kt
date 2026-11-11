@@ -1,5 +1,8 @@
 package com.eventoscomunitarios.app.core.components
 
+import androidx.compose.ui.res.stringResource
+import com.eventoscomunitarios.app.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -38,7 +41,7 @@ fun LoadingIndicator(modifier: Modifier = Modifier) {
             modifier = Modifier.padding(24.dp)
         ) {
             CircularProgressIndicator()
-            Text("Cargando…", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.ui_loading), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

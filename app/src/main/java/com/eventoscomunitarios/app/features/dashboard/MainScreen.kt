@@ -16,12 +16,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.eventoscomunitarios.app.R
+import com.eventoscomunitarios.app.core.util.localizedMessage
 import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.features.dashboard.component.BottomNavigationBar
 import com.eventoscomunitarios.app.features.dashboard.navigation.DashboardDestination
@@ -35,10 +37,11 @@ fun MainScreen(user: User, onLogout: () -> Unit, dataSyncError: String? = null) 
     val navController = rememberNavController()
     val currentEntry by navController.currentBackStackEntryAsState()
     val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
     val items = DashboardDestination.entries.filter { user.role in it.roles }
     val selected = items.firstOrNull { it.isSelected(currentEntry?.destination) }
 
-    LaunchedEffect(dataSyncError) { dataSyncError?.let { snackbar.showSnackbar(it) } }
+    LaunchedEffect(dataSyncError) { dataSyncError?.let { snackbar.showSnackbar(context.localizedMessage(it)) } }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -49,7 +52,7 @@ fun MainScreen(user: User, onLogout: () -> Unit, dataSyncError: String? = null) 
         },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            if (currentEntry?.destination?.hasRoute<DashboardRoutes.Home>() == true) {
+            if (user.canCreateEvents && currentEntry?.destination?.hasRoute<DashboardRoutes.Home>() == true) {
                 ExtendedFloatingActionButton(
                     onClick = { navController.navigate(DashboardRoutes.CreateEvent(user.id)) { launchSingleTop = true } },
                     modifier = Modifier.testTag("create_event_button"),

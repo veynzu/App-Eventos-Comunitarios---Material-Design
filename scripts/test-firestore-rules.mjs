@@ -111,6 +111,17 @@ function event(id, changes = {}) {
   };
 }
 let current = event(1);
+await check('Participante no puede crear eventos propios', request('events/90', alice, 'PATCH', event(90, { organizerId: alice.localId, lastActorId: alice.localId })), 403);
+await check('Organizador pendiente no puede crear eventos', request('events/1', bob, 'PATCH', current), 403);
+await check('Organizador no puede verificarse a si mismo', request(`users/${bob.localId}`, bob, 'PATCH', profile(bob, { role: 'ORGANIZER', organizerVerificationStatus: 'VERIFIED' })), 403);
+const identity = { userId: bob.localId, photoPath: `gs://demo-share-you-rules.appspot.com/identities/${bob.localId}/identity-photo`, submittedAt: new Date() };
+await check('Enviar documento privado propio', request(`organizerVerifications/${bob.localId}`, bob, 'PATCH', identity), 200);
+await check('No leer documento ajeno', request(`organizerVerifications/${bob.localId}`, alice), 403);
+await check('No enumerar documentos privados', request('organizerVerifications', alice), 403);
+await check('Administrador puede leer documento', request(`organizerVerifications/${bob.localId}`, moderator), 200);
+await check('No enviar documento con ruta de otro usuario', request(`organizerVerifications/${bob.localId}`, bob, 'PATCH', { ...identity, photoPath: `gs://bucket/identities/${alice.localId}/forged` }), 403);
+await check('Administrador verifica identidad', request(`users/${bob.localId}`, moderator, 'PATCH', profile(bob, { role: 'ORGANIZER', organizerVerificationStatus: 'VERIFIED' })), 200);
+await check('Identidad verificada no puede reemplazarse', request(`organizerVerifications/${bob.localId}`, bob, 'PATCH', identity), 403);
 await check('Crear evento con punto confirmado', request('events/1', bob, 'PATCH', current), 200);
 await check('No publicar con coordenadas sin confirmar', request('events/99', bob, 'PATCH', event(99, { locationConfirmed: false })), 403);
 await check('No publicar con coordenadas fuera de rango', request('events/99', bob, 'PATCH', event(99, { latitude: 95 })), 403);

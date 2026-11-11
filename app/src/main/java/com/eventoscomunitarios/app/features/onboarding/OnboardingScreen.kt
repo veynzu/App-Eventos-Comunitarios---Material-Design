@@ -1,5 +1,7 @@
 package com.eventoscomunitarios.app.features.onboarding
 
+import androidx.compose.ui.res.stringResource
+
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
@@ -30,7 +32,7 @@ fun OnboardingScreen(
             painter = painterResource(
                 id = R.drawable.comparte_y_conecta
             ),
-            contentDescription = "Logo de Share You",
+            contentDescription = stringResource(R.string.ui_logo),
             modifier = Modifier.fillMaxWidth(),
             contentScale = ContentScale.Fit
         )
@@ -38,7 +40,7 @@ fun OnboardingScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Descubre, comparte y conecta con tu comunidad",
+            text = stringResource(R.string.ui_onboarding),
             style = MaterialTheme.typography.titleMedium
         )
 
@@ -47,7 +49,7 @@ fun OnboardingScreen(
         Button(
             onClick = onContinuar
         ) {
-            Text(text = "Comenzar")
+            Text(text = stringResource(R.string.ui_get_started))
         }
     }
 }

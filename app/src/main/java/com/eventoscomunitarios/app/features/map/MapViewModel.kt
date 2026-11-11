@@ -10,12 +10,13 @@ import com.eventoscomunitarios.app.domain.model.Coordinates
 import com.eventoscomunitarios.app.domain.model.SearchLocation
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import java.util.Calendar
+import com.eventoscomunitarios.app.domain.model.EventSearchOptions
+import com.eventoscomunitarios.app.domain.model.EventCategory
+import com.eventoscomunitarios.app.domain.model.EventDateField
+import com.eventoscomunitarios.app.domain.usecase.filterEvents
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.AccountStatus
 import com.eventoscomunitarios.app.domain.model.Event
-import com.eventoscomunitarios.app.domain.model.EventModerationStatus
-import com.eventoscomunitarios.app.domain.model.UserRole
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,27 +35,22 @@ data class MapUiState(
     val searchLocation: SearchLocation = SearchLocation(),
     val showLocationPicker: Boolean = false,
     val radiusKm: Int = 5,
+    val searchOptions: EventSearchOptions = EventSearchOptions(),
+    val selectedCategory: EventCategory? = null,
+    val query: String = "",
+    val showFilters: Boolean = false,
+    val datePickerField: EventDateField? = null,
     val activeFilters: Set<MapFilter> = emptySet(),
     val events: List<Event> = emptyList(),
     val selectedEventId: Int? = null,
     val loadResult: RequestResult = RequestResult.Loading
 ) {
     val visibleEvents: List<Event>
-        get() = events.map { event -> event.copy(distanceKm = event.coordinates?.distanceKmTo(searchLocation.coordinates) ?: Double.POSITIVE_INFINITY) }.filter { event ->
-            event.moderationStatus == EventModerationStatus.APPROVED && !event.isFinished &&
-                event.endsAt > System.currentTimeMillis() && event.distanceKm <= radiusKm &&
-                (MapFilter.TODAY !in activeFilters || isToday(event)) &&
-                (MapFilter.OUTDOOR !in activeFilters || event.isOutdoor)
-        }
-
-    private fun isToday(event: Event): Boolean {
-        val start = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }
-        val end = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
-        return event.startsAt < end.timeInMillis && event.endsAt > start.timeInMillis
-    }
+        get() = filterEvents(events = events, origin = searchLocation.coordinates,
+            radiusKm = radiusKm.toDouble(), options = searchOptions.copy(
+                outdoorOnly = searchOptions.outdoorOnly || MapFilter.OUTDOOR in activeFilters),
+            category = selectedCategory, query = query, todayOnly = MapFilter.TODAY in activeFilters,
+            upcomingOnly = true)
 
 }
 
@@ -83,6 +79,20 @@ class MapViewModel @Inject constructor(
     fun closeLocationPicker() = _uiState.update { it.copy(showLocationPicker = false) }
     fun selectSearchLocation(point: Coordinates, address: String) { locations.select(point, address, userId); closeLocationPicker() }
 
+    fun onFiltersClick() = _uiState.update { it.copy(showFilters = !it.showFilters) }
+    fun onRadiusChange(value: Float) = _uiState.update { it.copy(radiusKm = value.toInt().coerceIn(1, 100), selectedEventId = null) }
+    fun onSearchOptionsChange(value: EventSearchOptions) = _uiState.update { it.copy(searchOptions = value, selectedEventId = null) }
+    fun onCategoryChange(value: EventCategory?) = _uiState.update { it.copy(selectedCategory = value, selectedEventId = null) }
+    fun onQueryChange(value: String) = _uiState.update { it.copy(query = value.take(100), selectedEventId = null) }
+    fun onDatePickerChange(field: EventDateField?) = _uiState.update { it.copy(datePickerField = field) }
+    fun onDateSelected(field: EventDateField, date: Long) = _uiState.update {
+        it.copy(searchOptions = it.searchOptions.withDate(field, date), activeFilters = it.activeFilters - MapFilter.TODAY, selectedEventId = null)
+    }
+    fun resetFilters() = _uiState.update {
+        it.copy(radiusKm = 5, searchOptions = EventSearchOptions(), selectedCategory = null, query = "",
+            activeFilters = emptySet(), datePickerField = null, selectedEventId = null)
+    }
+
     fun onRadiusClick() {
         _uiState.update { it.copy(radiusKm = if (it.radiusKm == 5) 10 else 5) }
     }
@@ -91,7 +101,8 @@ class MapViewModel @Inject constructor(
         _uiState.update { state ->
             val filters = state.activeFilters.toMutableSet()
             if (!filters.add(filter)) filters.remove(filter)
-            state.copy(activeFilters = filters, selectedEventId = null)
+            state.copy(activeFilters = filters, selectedEventId = null,
+                searchOptions = if (filter == MapFilter.TODAY) state.searchOptions.copy(fromDate = null, untilDate = null) else state.searchOptions)
         }
     }
 

@@ -1,5 +1,9 @@
 package com.eventoscomunitarios.app.features.my_events
 
+import com.eventoscomunitarios.app.core.util.localizedMessage
+
+import androidx.compose.ui.platform.LocalContext
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,49 +59,50 @@ fun MyEventsScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val snackbar = snackbarHostState
     LaunchedEffect(state.feedback) {
-        state.feedback?.let { snackbar.showSnackbar(it); viewModel.clearFeedback() }
+        state.feedback?.let { snackbar.showSnackbar(context.localizedMessage(it)); viewModel.clearFeedback() }
     }
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("Mis eventos") }, navigationIcon = {
-                   IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") }
+        TopAppBar(title = { Text(stringResource(R.string.ui_my_events)) }, navigationIcon = {
+                   IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.ui_back_alt)) }
                })
         Box(Modifier.weight(1f).fillMaxWidth()) {
             Column(Modifier.fillMaxSize().testTag("my_events_screen")) {
                 TabRow(selectedTabIndex = state.selectedTab.ordinal) {
                     MyEventsTab.entries.forEach { tab ->
                         Tab(selected = tab == state.selectedTab, onClick = { viewModel.onTabSelected(tab) },
-                            text = { Text(if (tab == MyEventsTab.ENROLLED) "Inscritos" else "Creados") })
+                            text = { Text(if (tab == MyEventsTab.ENROLLED) stringResource(R.string.ui_enrolled) else stringResource(R.string.ui_created)) })
                     }
                 }
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    state.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+                    state.error?.let { item { Text(localizedMessage(it), color = MaterialTheme.colorScheme.error) } }
                     if (state.selectedTab == MyEventsTab.ENROLLED) {
-                        if (state.enrolledEvents.isEmpty()) item { Text("No estás inscrito en ningún evento.") }
+                        if (state.enrolledEvents.isEmpty()) item { Text(stringResource(R.string.ui_no_enrolled)) }
                         items(state.enrolledEvents, key = { it.event.id }) { enrolled ->
                             val event = enrolled.event
                             EventSummary(event) {
-                                Text(if (enrolled.status == EventRegistrationStatus.CONFIRMED) "Asistencia confirmada"
-                                    else "Lista de espera · posición ${enrolled.waitlistPosition}")
+                                Text(if (enrolled.status == EventRegistrationStatus.CONFIRMED) stringResource(R.string.ui_attendance_confirmed)
+                                    else stringResource(R.string.ui_waiting_position, enrolled.waitlistPosition?.toString() ?: "—"))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(onClick = { onEventClick(event.id) }) { Text("Ver detalle") }
+                                    OutlinedButton(onClick = { onEventClick(event.id) }) { Text(stringResource(R.string.ui_details)) }
                                     if (!event.isFinished && event.startsAt > System.currentTimeMillis()) {
-                                        TextButton(onClick = { viewModel.requestAction(event.id, MyEventAction.CANCEL_REGISTRATION) }) { Text("Cancelar inscripción") }
+                                        TextButton(onClick = { viewModel.requestAction(event.id, MyEventAction.CANCEL_REGISTRATION) }) { Text(stringResource(R.string.ui_cancel_registration)) }
                                     }
                                 }
                             }
                         }
                     } else {
-                        if (state.createdEvents.isEmpty()) item { Text("Aún no has creado ningún evento.") }
+                        if (state.createdEvents.isEmpty()) item { Text(stringResource(R.string.ui_no_created)) }
                         items(state.createdEvents, key = { it.id }) { event ->
                             EventSummary(event) {
-                                Text("${event.attendeeCount}/${event.capacity} asistentes · ${state.waitlistCounts[event.id] ?: 0} en espera")
+                                Text(stringResource(R.string.ui_attendees_waiting_count, event.attendeeCount, event.capacity, state.waitlistCounts[event.id] ?: 0))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(onClick = { onEventClick(event.id) }) { Text("Ver detalle") }
+                                    OutlinedButton(onClick = { onEventClick(event.id) }) { Text(stringResource(R.string.ui_details)) }
                                     if (!event.isFinished && event.startsAt > System.currentTimeMillis()) {
-                                        OutlinedButton(onClick = { onAdministrarClick(event.id) }) { Text("Editar") }
+                                        OutlinedButton(onClick = { onAdministrarClick(event.id) }) { Text(stringResource(R.string.ui_edit)) }
                                     }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -105,9 +110,9 @@ fun MyEventsScreen(
                                         TextButton(onClick = { onRelaunch(event.id) }, modifier = Modifier.testTag("relaunch_event_${event.id}")) { Text(stringResource(R.string.relaunch_event)) }
                                     }
                                     if (!event.isFinished && event.moderationStatus == EventModerationStatus.APPROVED && event.startsAt <= System.currentTimeMillis()) {
-                                        TextButton(onClick = { viewModel.requestAction(event.id, MyEventAction.FINISH) }) { Text("Finalizar") }
+                                        TextButton(onClick = { viewModel.requestAction(event.id, MyEventAction.FINISH) }) { Text(stringResource(R.string.ui_finish)) }
                                     }
-                                    TextButton(onClick = { viewModel.requestAction(event.id, MyEventAction.DELETE) }) { Text("Eliminar publicación", color = MaterialTheme.colorScheme.error) }
+                                    TextButton(onClick = { viewModel.requestAction(event.id, MyEventAction.DELETE) }) { Text(stringResource(R.string.ui_delete_post), color = MaterialTheme.colorScheme.error) }
                                 }
                             }
                         }
@@ -119,21 +124,21 @@ fun MyEventsScreen(
     if (state.isLoading) LoadingIndicator()
     state.actionEvent?.let { event ->
         val title = when (state.action) {
-            MyEventAction.DELETE -> "Eliminar publicación"
-            MyEventAction.FINISH -> "Finalizar evento"
-            else -> "Cancelar inscripción"
+            MyEventAction.DELETE -> stringResource(R.string.ui_delete_post)
+            MyEventAction.FINISH -> stringResource(R.string.ui_finish_event)
+            else -> stringResource(R.string.ui_cancel_registration)
         }
         val explanation = when (state.action) {
-            MyEventAction.DELETE -> "Se eliminarán la publicación, sus comentarios, votos e inscripciones."
-            MyEventAction.FINISH -> "El evento quedará finalizado y no recibirá nuevas inscripciones."
+            MyEventAction.DELETE -> stringResource(R.string.ui_delete_post_help)
+            MyEventAction.FINISH -> stringResource(R.string.ui_finish_event_help)
             else -> if (state.enrolledEvents.firstOrNull { it.event.id == event.id }?.status == EventRegistrationStatus.WAITLIST)
-                "Saldrás de la lista de espera. Si vuelves a inscribirte ocuparás el último lugar."
-            else "Liberarás tu cupo. Si hay personas en espera, la primera recibirá una confirmación automática."
+                stringResource(R.string.ui_leave_waitlist_help)
+            else stringResource(R.string.ui_cancel_place_help)
         }
         AlertDialog(onDismissRequest = viewModel::dismissAction, title = { Text(title) },
             text = { Text("${event.title}\n\n$explanation") },
-            confirmButton = { TextButton(onClick = viewModel::confirmAction, enabled = !state.isSaving) { Text(if (state.isSaving) "Guardando…" else "Confirmar") } },
-            dismissButton = { TextButton(onClick = viewModel::dismissAction, enabled = !state.isSaving) { Text("Volver") } })
+            confirmButton = { TextButton(onClick = viewModel::confirmAction, enabled = !state.isSaving) { Text(if (state.isSaving) stringResource(R.string.ui_saving) else stringResource(R.string.ui_confirm)) } },
+            dismissButton = { TextButton(onClick = viewModel::dismissAction, enabled = !state.isSaving) { Text(stringResource(R.string.ui_back)) } })
     }
 }
 
@@ -144,16 +149,16 @@ private fun EventSummary(event: Event, actions: @Composable () -> Unit) {
             if (event.photoUri != null) RemoteImage(event.photoUri, event.title, Modifier.fillMaxWidth().height(120.dp))
             Text(event.title, style = MaterialTheme.typography.titleMedium)
             Text("${event.dateLabel} · ${event.timeLabel}", style = MaterialTheme.typography.bodySmall)
-            Text("Fin: ${eventFormDate(event.endsAt)} · ${eventFormTime(event.endsAt)}", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.ui_end_datetime, eventFormDate(event.endsAt), eventFormTime(event.endsAt)), style = MaterialTheme.typography.bodySmall)
             Text(event.location, style = MaterialTheme.typography.bodySmall)
             Text(when {
-                event.isFinished -> "Finalizado"
-                event.moderationStatus == EventModerationStatus.PENDING -> "Pendiente de revisión"
-                event.moderationStatus == EventModerationStatus.REJECTED -> "Rechazado"
-                event.endsAt <= System.currentTimeMillis() -> "Fecha de finalización alcanzada"
-                else -> "Aprobado"
+                event.isFinished -> stringResource(R.string.ui_finished)
+                event.moderationStatus == EventModerationStatus.PENDING -> stringResource(R.string.ui_pending)
+                event.moderationStatus == EventModerationStatus.REJECTED -> stringResource(R.string.ui_rejected)
+                event.endsAt <= System.currentTimeMillis() -> stringResource(R.string.ui_end_reached)
+                else -> stringResource(R.string.ui_approved)
             }, color = MaterialTheme.colorScheme.primary)
-            event.rejectionReason?.let { Text("Motivo del rechazo: $it", color = MaterialTheme.colorScheme.error) }
+            event.rejectionReason?.let { Text(stringResource(R.string.ui_rejection, it), color = MaterialTheme.colorScheme.error) }
             actions()
         }
     }

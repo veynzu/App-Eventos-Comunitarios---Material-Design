@@ -1,0 +1,16 @@
+<resources>
+    <string name="notification_pending_message">%1$s is awaiting review.</string>
+    <string name="notification_approved_message">%1$s is now visible to the community.</string>
+    <string name="notification_updated_message">%1$s changed. Check the dates; it is awaiting approval again.</string>
+    <string name="notification_registration_kept_message">%1$s is approved. Your registration is kept.</string>
+    <string name="notification_rejected_message">%1$s was rejected. Your registration was cancelled. Reason: %2$s</string>
+    <string name="notification_finished_message">%1$s has finished. You can share your comment and rating.</string>
+    <string name="notification_confirmed_message">You have a place for %1$s.</string>
+    <string name="notification_waiting_message">We will notify you if a place becomes available for %1$s.</string>
+    <string name="notification_cancelled_message">You cancelled your registration for %1$s.</string>
+    <string name="notification_deleted_registration_message">%1$s was deleted. Your registration was cancelled.</string>
+    <string name="notification_deleted_message">%1$s was deleted.</string>
+    <string name="notification_promoted_message">Your attendance at %1$s was confirmed from the waiting list.</string>
+    <string name="notification_comment_message">%1$s commented on %2$s.</string>
+    <string name="notification_followed_message">%1$s: %2$s at %3$s. Confirm whether you will attend.</string>
+</resources>

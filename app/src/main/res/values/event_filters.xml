@@ -1,0 +1,33 @@
+<resources>
+    <string name="search_radius">Distancia máxima: %1$d km</string>
+    <string name="search_all_categories">Todas las categorías</string>
+    <string name="search_today">Hoy</string>
+    <string name="search_free">Gratis</string>
+    <string name="search_available">Con cupos</string>
+    <string name="search_outdoor">Al aire libre</string>
+    <string name="search_from_date">Desde: %1$s</string>
+    <string name="search_until_date">Hasta: %1$s</string>
+    <string name="search_any_date">cualquier fecha</string>
+    <string name="search_sort_date">Por fecha</string>
+    <string name="search_sort_distance">Más cercanos</string>
+    <string name="search_reset">Limpiar filtros</string>
+    <string name="search_apply_date">Aplicar</string>
+    <string name="search_cancel">Cancelar</string>
+    <string name="search_select_from">Fecha inicial</string>
+    <string name="search_select_until">Fecha final</string>
+    <string name="search_retry">Reintentar</string>
+    <string name="search_back_login">Volver al inicio de sesión</string>
+    <string name="search_greeting">Hola, %1$s</string>
+    <string name="search_discover">Descubre qué pasa cerca de ti</string>
+    <string name="search_query">Buscar por título o lugar</string>
+    <string name="search_favorites">Favoritos</string>
+    <string name="search_nearby">Cerca de ti</string>
+    <string name="search_view_map">Ver mapa</string>
+    <string name="search_empty">No hay eventos que coincidan con estos filtros.</string>
+    <string name="search_finished">Finalizado</string>
+    <string name="search_attendees">%1$d/%2$d van</string>
+    <string name="search_events_in_area">%1$d eventos en esta zona</string>
+    <string name="search_view">Ver</string>
+    <string name="search_show_filters">Mostrar filtros</string>
+    <string name="search_hide_filters">Ocultar filtros</string>
+</resources>

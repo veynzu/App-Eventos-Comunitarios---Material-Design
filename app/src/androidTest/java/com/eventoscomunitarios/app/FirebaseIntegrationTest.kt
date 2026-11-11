@@ -85,7 +85,7 @@ class FirebaseIntegrationTest {
 
     @Test fun concurrentAttendanceAndSocialDataPersistAcrossClients() = runBlocking {
         val owner = client()
-        val author = owner.users.register("Organizador", "owner-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.ORGANIZER).getOrThrow()
+        val author = owner.users.register("Organizador", "owner-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.PARTICIPANT).getOrThrow()
         // Fixture solo local: el registro público nunca permite elegir ADMINISTRATOR.
         fixtureUpdate("users/${author.id}", mapOf("role" to mapOf("stringValue" to UserRole.ADMINISTRATOR.name)))
         waitUntil { owner.users.findUser(author.id)?.role == UserRole.ADMINISTRATOR }
@@ -144,7 +144,7 @@ class FirebaseIntegrationTest {
 
     @Test fun relaunchPreservesFavoritesAndNotifiesOnlyAfterNewApproval() = runBlocking {
         val owner = client()
-        val author = owner.users.register("Autor recurrente", "series-owner-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.ORGANIZER).getOrThrow()
+        val author = owner.users.register("Autor recurrente", "series-owner-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.PARTICIPANT).getOrThrow()
         fixtureUpdate("users/${author.id}", mapOf("role" to mapOf("stringValue" to UserRole.ADMINISTRATOR.name)))
         waitUntil { owner.users.findUser(author.id)?.role == UserRole.ADMINISTRATOR }
         val viewer = client()
@@ -182,7 +182,10 @@ class FirebaseIntegrationTest {
 
     @Test fun storageUploadsEventAndProfileImagesAndRejectsInvalidContent() = runBlocking {
         val client = client()
-        val user = client.users.register("Fotos Firebase", "image-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.ORGANIZER).getOrThrow()
+        val user = client.users.register("Fotos Firebase", "image-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.PARTICIPANT).getOrThrow()
+        fixtureUpdate("users/${user.id}", mapOf("role" to mapOf("stringValue" to UserRole.ORGANIZER.name),
+            "organizerVerificationStatus" to mapOf("stringValue" to OrganizerVerificationStatus.VERIFIED.name)))
+        waitUntil { client.users.findUser(user.id)?.canCreateEvents == true }
         val uri = imageUri()
         val event = client.events.create(user.id, draft(user.id, user.name).copy(photoUri = uri.toString())).getOrThrow()
         val remoteUrl = requireNotNull(event.photoUri)
@@ -202,6 +205,38 @@ class FirebaseIntegrationTest {
         client.users.deleteAccount(user.id, PASSWORD).getOrThrow()
     }
 
+    @Test fun organizerNeedsPrivateIdentityReviewBeforePublishing() = runBlocking {
+        val moderator = client()
+        val admin = moderator.users.register("Administrador", "reviewer-${UUID.randomUUID()}@example.test",
+            PASSWORD, null, UserRole.PARTICIPANT).getOrThrow()
+        fixtureUpdate("users/${admin.id}", mapOf("role" to mapOf("stringValue" to UserRole.ADMINISTRATOR.name)))
+        waitUntil { moderator.users.findUser(admin.id)?.role == UserRole.ADMINISTRATOR }
+        val owner = client()
+        val organizer = owner.users.register("Organizador pendiente", "identity-${UUID.randomUUID()}@example.test",
+            PASSWORD, null, UserRole.ORGANIZER, imageUri().toString()).getOrThrow()
+        waitUntil { moderator.users.findUser(organizer.id) != null }
+        assertEquals(OrganizerVerificationStatus.PENDING, organizer.organizerVerificationStatus)
+        assertFalse(owner.events.canPublish(organizer.id))
+        assertTrue(owner.events.create(organizer.id, draft(organizer.id, organizer.name)).isFailure)
+        val publicProfile = owner.db.collection("users").document(organizer.id).get(Source.SERVER).await()
+        assertFalse(publicProfile.contains("photoPath"))
+        val identity = moderator.users.loadOrganizerIdentity(admin.id, organizer.id).getOrThrow()
+        assertTrue(identity.photoPath.startsWith("gs://"))
+        assertTrue(identity.imageBytes.isNotEmpty())
+        val viewer = client()
+        val participant = viewer.users.register("Participante", "private-viewer-${UUID.randomUUID()}@example.test",
+            PASSWORD, null, UserRole.PARTICIPANT).getOrThrow()
+        assertTrue(runCatching { viewer.db.collection("organizerVerifications").document(organizer.id).get(Source.SERVER).await() }.isFailure)
+        assertTrue(runCatching { viewer.media.readPrivateImage(identity.photoPath) }.isFailure)
+        assertTrue(viewer.users.reviewOrganizerIdentity(participant.id, organizer.id, identity.photoPath, true).isFailure)
+        moderator.users.reviewOrganizerIdentity(admin.id, organizer.id, identity.photoPath, true).getOrThrow()
+        waitUntil { owner.users.findUser(organizer.id)?.canCreateEvents == true }
+        assertTrue(owner.events.create(organizer.id, draft(organizer.id, organizer.name)).isSuccess)
+        owner.users.deleteAccount(organizer.id, PASSWORD).getOrThrow()
+        assertFalse(moderator.db.collection("organizerVerifications").document(organizer.id).get(Source.SERVER).await().exists())
+        assertTrue(runCatching { moderator.media.readPrivateImage(identity.photoPath) }.isFailure)
+    }
+
     private fun client(): Client {
         val options = FirebaseOptions.Builder().setProjectId("demo-share-you")
             .setApplicationId("1:123456789:android:1234567890abcdef")
@@ -218,10 +253,10 @@ class FirebaseIntegrationTest {
     }
 
     private inner class Client(val app: FirebaseApp, val auth: FirebaseAuth, val db: FirebaseFirestore, val storage: FirebaseStorage) {
-        val userRepository = FirebaseUserRepository(auth, db)
+        val media = FirebaseMediaRepository(context, storage, auth)
+        val userRepository = FirebaseUserRepository(auth, db, media)
         val eventRepository = FirebaseEventRepository(db, auth)
         val communityRepository = FirebaseCommunityRepository(db, auth)
-        val media = FirebaseMediaRepository(context, storage, auth)
         val events = EventUseCases(eventRepository, userRepository, communityRepository, media)
         val users = UserUseCases(userRepository, eventRepository, communityRepository, events, media)
         val community = CommunityUseCases(communityRepository, eventRepository, userRepository)

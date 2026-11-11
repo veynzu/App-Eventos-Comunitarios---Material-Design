@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -111,25 +112,28 @@ fun DashboardNavigation(
             }
             composable<DashboardRoutes.CreateEvent> { entry ->
                 val route = entry.toRoute<DashboardRoutes.CreateEvent>()
-                val createEventViewModel: CreateEventViewModel = hiltViewModel(entry)
-                if (route.userId == user.id) {
+                if (route.userId == user.id && user.canCreateEvents) {
+                    val createEventViewModel: CreateEventViewModel = hiltViewModel(entry)
                     CreateEventScreen(
                         viewModel = createEventViewModel,
                         onCloseClick = { navController.popBackStack() },
                         onEventCreated = { navController.popBackStack() }
                     )
+                } else {
+                    LaunchedEffect(entry.id) { navController.popBackStack() }
                 }
             }
             composable<DashboardRoutes.EditEvent> { entry ->
                 val route = entry.toRoute<DashboardRoutes.EditEvent>()
-                val editEventViewModel: EditEventViewModel = hiltViewModel(entry)
-
-                if (route.userId == user.id) {
+                if (route.userId == user.id && user.canCreateEvents) {
+                    val editEventViewModel: EditEventViewModel = hiltViewModel(entry)
                     EditEventScreen(
                         viewModel = editEventViewModel,
                         onCloseClick = { navController.popBackStack() },
                         onChangesSaved = { navController.popBackStack() }
                     )
+                } else {
+                    LaunchedEffect(entry.id) { navController.popBackStack() }
                 }
             }
             composable<DashboardRoutes.MyEvents> { entry ->
@@ -185,7 +189,7 @@ fun DashboardNavigation(
             composable<DashboardRoutes.AdminDashboard> { entry ->
                 val route = entry.toRoute<DashboardRoutes.AdminDashboard>()
                 val dashboardViewModel: AdminDashboardViewModel = hiltViewModel(entry)
-                if (route.userId == user.id) {
+                if (route.userId == user.id && user.role == UserRole.ADMINISTRATOR) {
                     AdminDashboardScreen(
                         viewModel = dashboardViewModel,
                         onNotificationsClick = { navController.navigate(DashboardRoutes.Notifications(route.userId)) { launchSingleTop = true } },
@@ -200,7 +204,7 @@ fun DashboardNavigation(
             composable<DashboardRoutes.AdminModeration> { entry ->
                 val route = entry.toRoute<DashboardRoutes.AdminModeration>()
                 val moderationViewModel: AdminModerationViewModel = hiltViewModel(entry)
-                if (route.userId == user.id) {
+                if (route.userId == user.id && user.role == UserRole.ADMINISTRATOR) {
                     AdminModerationScreen(
                         snackbarHostState = snackbarHostState,
                         viewModel = moderationViewModel,
@@ -213,7 +217,7 @@ fun DashboardNavigation(
             composable<DashboardRoutes.AdminUsers> { entry ->
                 val route = entry.toRoute<DashboardRoutes.AdminUsers>()
                 val usersViewModel: AdminUsersViewModel = hiltViewModel(entry)
-                if (route.userId == user.id) {
+                if (route.userId == user.id && user.role == UserRole.ADMINISTRATOR) {
                     AdminUsersScreen(
                         snackbarHostState = snackbarHostState,
                         viewModel = usersViewModel,

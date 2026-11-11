@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -29,13 +28,12 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -58,18 +56,21 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.eventoscomunitarios.app.domain.model.Event
 import com.eventoscomunitarios.app.domain.model.EventCategory
+import com.eventoscomunitarios.app.core.util.localizedMessage
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.core.components.RemoteImage
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
 import com.eventoscomunitarios.app.domain.model.UserRole
 import com.eventoscomunitarios.app.domain.model.User
 import java.util.Date
+import com.eventoscomunitarios.app.core.components.EventSearchControls
+import com.eventoscomunitarios.app.domain.model.EventSearchOptions
+import com.eventoscomunitarios.app.domain.model.EventDateField
 import com.eventoscomunitarios.app.core.components.SearchLocationControls
 import com.eventoscomunitarios.app.features.locationpicker.LocationPickerDialog
 import com.eventoscomunitarios.app.ui.theme.AppeventoscomunitariosTheme
 import com.eventoscomunitarios.app.ui.theme.AzulClaro
 import com.eventoscomunitarios.app.ui.theme.Fondo
-import com.eventoscomunitarios.app.ui.theme.Gris
 import com.eventoscomunitarios.app.ui.theme.TextoPrincipal
 import com.eventoscomunitarios.app.ui.theme.TextoSecundario
 
@@ -91,6 +92,11 @@ fun HomeScreen(
         state = state,
         onSearchRadiusChange = viewModel::onSearchRadiusChange,
         onFilterChange = viewModel::onFilterChange,
+        onSearchOptionsChange = viewModel::onSearchOptionsChange,
+        onDatePickerChange = viewModel::onDatePickerChange,
+        onDateSelected = viewModel::onDateSelected,
+        onTodayClick = viewModel::onTodayClick,
+        onResetFilters = viewModel::resetFilters,
         onCategoryChange = viewModel::onCategoryChange,
         onQueryChange = viewModel::onQueryChange,
         onAbrirNotificaciones = onAbrirNotificaciones,
@@ -121,7 +127,12 @@ private fun HomeScreenContent(
     onRetry: () -> Unit,
     onSessionInvalid: () -> Unit,
     onChooseSearchLocation: () -> Unit = {},
-    onUseDeviceLocation: () -> Unit = {}
+    onUseDeviceLocation: () -> Unit = {},
+    onSearchOptionsChange: (EventSearchOptions) -> Unit = {},
+    onDatePickerChange: (EventDateField?) -> Unit = {},
+    onDateSelected: (EventDateField, Long) -> Unit = { _, _ -> },
+    onTodayClick: () -> Unit = {},
+    onResetFilters: () -> Unit = {}
 ) {
 
     when (val result = state.loadResult) {
@@ -135,12 +146,12 @@ private fun HomeScreenContent(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(result.message, style = MaterialTheme.typography.titleMedium)
+                Text(localizedMessage(result.message), style = MaterialTheme.typography.titleMedium)
                 state.userErrors.values.forEach { error ->
-                    Text(error, color = MaterialTheme.colorScheme.error)
+                    Text(localizedMessage(error), color = MaterialTheme.colorScheme.error)
                 }
-                Button(onClick = onRetry) { Text("Reintentar") }
-                TextButton(onClick = onSessionInvalid) { Text("Volver al inicio de sesión") }
+                Button(onClick = onRetry) { Text(stringResource(R.string.search_retry)) }
+                TextButton(onClick = onSessionInvalid) { Text(stringResource(R.string.search_back_login)) }
             }
             return
         }
@@ -158,6 +169,11 @@ private fun HomeScreenContent(
                     userInitials = state.userInitials,
                     onSearchRadiusChange = onSearchRadiusChange,
                     onFilterChange = onFilterChange,
+                    onSearchOptionsChange = onSearchOptionsChange,
+                    onDatePickerChange = onDatePickerChange,
+                    onDateSelected = onDateSelected,
+                    onTodayClick = onTodayClick,
+                    onResetFilters = onResetFilters,
                     onCategoryChange = onCategoryChange,
                     onQueryChange = onQueryChange,
                     onAbrirNotificaciones = onAbrirNotificaciones,
@@ -188,7 +204,12 @@ private fun HomeContent(
     onAbrirPerfil: () -> Unit,
     onEventClick: (Int) -> Unit,
     onChooseSearchLocation: () -> Unit = {},
-    onUseDeviceLocation: () -> Unit = {}
+    onUseDeviceLocation: () -> Unit = {},
+    onSearchOptionsChange: (EventSearchOptions) -> Unit = {},
+    onDatePickerChange: (EventDateField?) -> Unit = {},
+    onDateSelected: (EventDateField, Long) -> Unit = { _, _ -> },
+    onTodayClick: () -> Unit = {},
+    onResetFilters: () -> Unit = {}
 ) {
     val azulPrincipal = MaterialTheme.colorScheme.primary
 
@@ -214,13 +235,13 @@ private fun HomeContent(
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                            text = "Hola, $userName",
+                            text = stringResource(R.string.search_greeting, userName),
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Medium,
                             color = TextoPrincipal
                         )
                         Text(
-                            text = "Descubre qué pasa cerca de ti",
+                            text = stringResource(R.string.search_discover),
                             fontSize = 12.sp,
                             color = TextoSecundario
                         )
@@ -257,83 +278,28 @@ private fun HomeContent(
             item { SearchLocationControls(state.searchLocation, onChooseSearchLocation, onUseDeviceLocation) }
 
             item {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Radio de búsqueda",
-                            fontSize = 11.sp,
-                            color = TextoSecundario
-                        )
-
-                        Spacer(modifier = Modifier.weight(1f))
-
-                        Text(
-                            text = "${state.searchRadiusKm.toInt()} km",
-                            fontSize = 11.sp,
-                            color = azulPrincipal,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    Slider(
-                        value = state.searchRadiusKm,
-                        onValueChange = onSearchRadiusChange,
-                        valueRange = 1f..10f,
-                        steps = 8,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(30.dp)
-                    )
-                }
+                EventSearchControls(
+                    radiusKm = state.searchRadiusKm, onRadiusChange = onSearchRadiusChange,
+                    options = state.searchOptions, onOptionsChange = onSearchOptionsChange,
+                    category = state.selectedCategory, onCategoryChange = onCategoryChange,
+                    todayOnly = state.searchOptions.todayOnly || state.selectedFilter == HomeFilter.TODAY, onTodayClick = onTodayClick,
+                    datePickerField = state.datePickerField, onDatePickerChange = onDatePickerChange,
+                    onDateSelected = onDateSelected, onReset = onResetFilters
+                )
             }
 
-            state.syncError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
+            state.syncError?.let { message -> item { Text(localizedMessage(message), color = MaterialTheme.colorScheme.error) } }
             item {
                 OutlinedTextField(
                     value = state.query, onValueChange = onQueryChange,
-                    label = { Text("Buscar por título o lugar") }, singleLine = true,
+                    label = { Text(stringResource(R.string.search_query)) }, singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
             item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    item {
-                        FilterChip(selected = state.selectedCategory == null,
-                            onClick = { onCategoryChange(null) }, label = { Text("Todas las categorías") })
-                    }
-                    items(EventCategory.entries) { category ->
-                        FilterChip(selected = state.selectedCategory == category,
-                            onClick = { onCategoryChange(category) }, label = { Text(category.displayName) })
-                    }
-                }
-            }
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    HomeFilter.entries.forEach { filter ->
-                        FilterChip(
-                            selected = state.selectedFilter == filter,
-                            onClick = {
-                                onFilterChange(filter)
-                            },
-                            label = {
-                                Text(
-                                    text = filter.label,
-                                    fontSize = 11.sp,
-                                    maxLines = 1
-                                )
-                            }
-                        )
-                    }
-                }
+                FilterChip(selected = state.selectedFilter == HomeFilter.FAVORITES,
+                    onClick = { onFilterChange(if (state.selectedFilter == HomeFilter.FAVORITES) HomeFilter.ALL else HomeFilter.FAVORITES) },
+                    label = { Text(stringResource(R.string.search_favorites)) })
             }
 
             item {
@@ -344,7 +310,7 @@ private fun HomeContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Cerca de ti",
+                        text = stringResource(R.string.search_nearby),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = TextoPrincipal
@@ -353,7 +319,7 @@ private fun HomeContent(
                     Spacer(modifier = Modifier.weight(1f))
 
                     Text(
-                        text = "Ver mapa",
+                        text = stringResource(R.string.search_view_map),
                         fontSize = 11.sp,
                         color = azulPrincipal,
                         modifier = Modifier.clickable(onClick = onAbrirMapa)
@@ -364,7 +330,7 @@ private fun HomeContent(
             if (state.filteredEvents.isEmpty()) {
                 item {
                     Text(
-                        text = "No hay eventos que coincidan con estos filtros.",
+                        text = stringResource(R.string.search_empty),
                         fontSize = 13.sp,
                         color = TextoSecundario,
                         textAlign = TextAlign.Center,
@@ -538,7 +504,7 @@ private fun EventCard(
                     Spacer(modifier = Modifier.weight(1f))
 
                     Text(
-                        text = if (event.isFinished || event.endsAt <= System.currentTimeMillis()) "Finalizado" else "${event.attendeeCount}/${event.capacity} van",
+                        text = if (event.isFinished || event.endsAt <= System.currentTimeMillis()) stringResource(R.string.search_finished) else stringResource(R.string.search_attendees, event.attendeeCount, event.capacity),
                         fontSize = 8.sp,
                         color = TextoSecundario,
                         maxLines = 1
@@ -761,8 +727,9 @@ private fun IconoCorazon(
     }
 }
 
+@Composable
 private fun formatPrice(price: Int): String {
-    if (price == 0) return "Gratis"
+    if (price == 0) return stringResource(R.string.search_free)
 
     return "\$${price.toString().reversed().chunked(3).joinToString(".").reversed()}"
 }

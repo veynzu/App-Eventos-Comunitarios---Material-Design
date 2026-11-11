@@ -1,0 +1,33 @@
+<resources>
+    <string name="search_radius">Maximum distance: %1$d km</string>
+    <string name="search_all_categories">All categories</string>
+    <string name="search_today">Today</string>
+    <string name="search_free">Free</string>
+    <string name="search_available">Spaces available</string>
+    <string name="search_outdoor">Outdoors</string>
+    <string name="search_from_date">From: %1$s</string>
+    <string name="search_until_date">Until: %1$s</string>
+    <string name="search_any_date">any date</string>
+    <string name="search_sort_date">By date</string>
+    <string name="search_sort_distance">Nearest</string>
+    <string name="search_reset">Clear filters</string>
+    <string name="search_apply_date">Apply</string>
+    <string name="search_cancel">Cancel</string>
+    <string name="search_select_from">Start date</string>
+    <string name="search_select_until">End date</string>
+    <string name="search_retry">Retry</string>
+    <string name="search_back_login">Back to sign in</string>
+    <string name="search_greeting">Hi, %1$s</string>
+    <string name="search_discover">Discover what is happening near you</string>
+    <string name="search_query">Search by title or place</string>
+    <string name="search_favorites">Favorites</string>
+    <string name="search_nearby">Near you</string>
+    <string name="search_view_map">View map</string>
+    <string name="search_empty">No events match these filters.</string>
+    <string name="search_finished">Finished</string>
+    <string name="search_attendees">%1$d/%2$d attending</string>
+    <string name="search_events_in_area">%1$d events in this area</string>
+    <string name="search_view">View</string>
+    <string name="search_show_filters">Show filters</string>
+    <string name="search_hide_filters">Hide filters</string>
+</resources>

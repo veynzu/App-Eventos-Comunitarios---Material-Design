@@ -1,0 +1,16 @@
+<resources>
+    <string name="notification_pending_message">%1$s está pendiente de revisión.</string>
+    <string name="notification_approved_message">%1$s ya es visible para la comunidad.</string>
+    <string name="notification_updated_message">%1$s cambió. Revisa las fechas; está pendiente de nueva aprobación.</string>
+    <string name="notification_registration_kept_message">%1$s está aprobado. Tu inscripción se conserva.</string>
+    <string name="notification_rejected_message">%1$s fue rechazado. Tu inscripción se canceló. Motivo: %2$s</string>
+    <string name="notification_finished_message">%1$s ha finalizado. Puedes compartir tu comentario y valoración.</string>
+    <string name="notification_confirmed_message">Tienes un cupo para %1$s.</string>
+    <string name="notification_waiting_message">Te avisaremos si se libera un cupo para %1$s.</string>
+    <string name="notification_cancelled_message">Cancelaste tu inscripción a %1$s.</string>
+    <string name="notification_deleted_registration_message">%1$s fue eliminada; su inscripción quedó cancelada.</string>
+    <string name="notification_deleted_message">%1$s fue eliminada.</string>
+    <string name="notification_promoted_message">Tu asistencia a %1$s quedó confirmada desde la lista de espera.</string>
+    <string name="notification_comment_message">%1$s comentó en %2$s.</string>
+    <string name="notification_followed_message">%1$s: %2$s a las %3$s. Confirma si participarás.</string>
+</resources>

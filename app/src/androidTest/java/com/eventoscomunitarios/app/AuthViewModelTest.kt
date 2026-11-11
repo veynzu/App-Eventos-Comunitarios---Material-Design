@@ -59,9 +59,31 @@ class AuthViewModelTest {
         assertNull(login.uiState.value.authenticatedUser)
     }
 
-    @Test fun organizerRegistrationWorksWithoutImagesAndCanLogIn() = onMain {
+    @Test fun loginLetsFirebaseValidateExistingShortPasswords() = onMain {
+        val admin = data.users.findUser("administrator-laura")!!
+        var receivedPassword: String? = null
+        val remote = object : UserRepository by data.userRepository {
+            override suspend fun login(email: String, password: String): User {
+                receivedPassword = password
+                return admin
+            }
+        }
+        val cases = UserUseCases(remote, data.eventRepository, data.communityRepository, data.events)
+        val login = LoginViewModel(cases)
+        login.onEmailChange(admin.email)
+        login.onPasswordChange("123456")
+        login.login()
+        assertNull(login.uiState.value.passwordError)
+        assertEquals("123456", receivedPassword)
+        assertEquals(admin, login.uiState.value.authenticatedUser)
+    }
+
+    @Test fun organizerRegistrationRequiresIdentityAndCanLogInWhilePending() = onMain {
         val register = validRegistration("nueva.persona@correo.com")
         register.onAccountTypeChange(true)
+        register.onContinuarClick()
+        assertNull(register.uiState.value.registeredUser)
+        register.onIdentityPhotoSelected("content://test/identity.jpg")
         register.onContinuarClick()
         val user = requireNotNull(register.uiState.value.registeredUser)
         assertEquals(UserRole.ORGANIZER, user.role)
@@ -90,7 +112,7 @@ class AuthViewModelTest {
         val home = HomeViewModel(data.events, data.users, data.community, data.locations)
         home.loadUser("participant-ana")
         assertEquals(RequestResult.Success, home.uiState.value.loadResult)
-        assertTrue(home.uiState.value.canCreateEvent)
+        assertFalse(home.uiState.value.canCreateEvent)
         home.loadUser("no-existe")
         assertTrue(home.uiState.value.loadResult is RequestResult.Failure)
         assertNull(home.uiState.value.user)

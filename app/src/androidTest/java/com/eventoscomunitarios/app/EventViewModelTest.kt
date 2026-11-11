@@ -28,16 +28,24 @@ class EventViewModelTest {
     private val data = TestDependencies()
     private fun handle(user: String, event: Int = 1) = SavedStateHandle(mapOf("userId" to user, "eventId" to event))
 
-    @Test fun participantCreatesPendingEventWithRealStartAndEnd() = runBlocking {
-        val form = validForm("participant-ana")
+    @Test fun organizerCreatesPendingEventWithRealStartAndEnd() = runBlocking {
+        val form = validForm("organizer-carlos")
         form.publishEvent()
         await { form.uiState.value.publishResult != RequestResult.Loading }
         assertEquals(RequestResult.Success, form.uiState.value.publishResult)
         val event = data.events.events.value.last()
-        assertEquals("participant-ana", event.organizerId)
+        assertEquals("organizer-carlos", event.organizerId)
         assertEquals(EventModerationStatus.PENDING, event.moderationStatus)
         assertTrue(event.endsAt > event.startsAt)
         assertNull(event.photoUri)
+    }
+
+    @Test fun participantCannotPublishEvenWithAValidForm() = runBlocking {
+        val before = data.events.events.value.size
+        val form = validForm("participant-ana")
+        form.publishEvent()
+        assertTrue(form.uiState.value.publishResult is RequestResult.Failure)
+        assertEquals(before, data.events.events.value.size)
     }
 
     @Test fun impossibleDateAndEndBeforeStartDoNotPublish() = runBlocking {

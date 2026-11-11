@@ -1,5 +1,13 @@
 package com.eventoscomunitarios.app.features.registro
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
+import com.eventoscomunitarios.app.core.util.localizedMessage
+import com.eventoscomunitarios.app.R
+import com.eventoscomunitarios.app.core.components.RemoteImage
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -83,6 +91,7 @@ fun RegistroScreen(
     onRegistroExitoso: (User) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(state.registroResult) {
@@ -94,7 +103,7 @@ fun RegistroScreen(
             }
 
             is RequestResult.Failure -> {
-                snackbarHostState.showSnackbar(result.message)
+                snackbarHostState.showSnackbar(context.localizedMessage(result.message))
                 viewModel.clearRegistroResult()
             }
 
@@ -120,6 +129,7 @@ fun RegistroScreen(
                 onPasswordChange = viewModel::onPasswordChange,
                 onConfirmPasswordChange = viewModel::onConfirmPasswordChange,
                 onAccountTypeChange = viewModel::onAccountTypeChange,
+                onIdentityPhotoSelected = viewModel::onIdentityPhotoSelected,
                 onTerminosChange = viewModel::onTerminosChange,
                 onContinuar = viewModel::onContinuarClick,
                 modifier = Modifier
@@ -141,8 +151,12 @@ private fun RegistroContent(
     onAccountTypeChange: (Boolean) -> Unit,
     onTerminosChange: (Boolean) -> Unit,
     onContinuar: () -> Unit,
+    onIdentityPhotoSelected: (String?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val identityPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) {
+        onIdentityPhotoSelected(it?.toString())
+    }
     var mostrarContrasena by rememberSaveable {
         mutableStateOf(false)
     }
@@ -169,20 +183,20 @@ private fun RegistroContent(
                 IconButton(onClick = onNavigateBack) {
                     Icon(
                         imageVector = Icons.Outlined.ArrowBack,
-                        contentDescription = "Volver",
+                        contentDescription = stringResource(R.string.verification_ui_back),
                         tint = TextoPrincipal
                     )
                 }
 
                 Text(
-                    text = "Crear cuenta",
+                    text = stringResource(R.string.verification_ui_register),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Medium,
                     color = TextoPrincipal
                 )
             }
 
-            Text("Datos personales", color = azulPrincipal, modifier = Modifier.fillMaxWidth())
+            Text(stringResource(R.string.verification_ui_personal_details), color = azulPrincipal, modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(10.dp))
 
             Column(
@@ -195,7 +209,7 @@ private fun RegistroContent(
                     RegistroField(
                         value = state.nombre,
                         onValueChange = onNombreChange,
-                        label = "Nombre completo",
+                        label = stringResource(R.string.verification_ui_name),
                         placeholder = "Ana María Torres",
                         error = state.nombreError,
                         leadingIcon = {
@@ -211,7 +225,7 @@ private fun RegistroContent(
                     RegistroField(
                         value = state.email,
                         onValueChange = onEmailChange,
-                        label = "Correo electrónico",
+                        label = stringResource(R.string.verification_ui_email),
                         placeholder = "ana.torres@correo.com",
                         error = state.emailError,
                         leadingIcon = {
@@ -227,7 +241,7 @@ private fun RegistroContent(
                     RegistroField(
                         value = state.telefono,
                         onValueChange = onTelefonoChange,
-                        label = "Teléfono",
+                        label = stringResource(R.string.verification_ui_phone),
                         placeholder = "+57 310 555 4821",
                         error = state.telefonoError,
                         leadingIcon = {
@@ -243,11 +257,11 @@ private fun RegistroContent(
                     RegistroField(
                         value = state.password,
                         onValueChange = onPasswordChange,
-                        label = "Contraseña",
+                        label = stringResource(R.string.verification_ui_password),
                         placeholder = "",
                         error = state.passwordError,
                         supportingText = if (state.passwordError == null) {
-                            "8+ caracteres, 1 mayúscula y 1 número"
+                            stringResource(R.string.verification_ui_password_hint)
                         } else {
                             null
                         },
@@ -270,9 +284,9 @@ private fun RegistroContent(
                                         Icons.Outlined.Visibility
                                     },
                                     contentDescription = if (mostrarContrasena) {
-                                        "Ocultar contraseña"
+                                        stringResource(R.string.verification_ui_hide_password)
                                     } else {
-                                        "Mostrar contraseña"
+                                        stringResource(R.string.verification_ui_show_password)
                                     }
                                 )
                             }
@@ -289,7 +303,7 @@ private fun RegistroContent(
                     RegistroField(
                         value = state.confirmPassword,
                         onValueChange = onConfirmPasswordChange,
-                        label = "Confirmar contraseña",
+                        label = stringResource(R.string.verification_ui_confirm_password),
                         placeholder = "",
                         error = state.confirmPasswordError,
                         leadingIcon = {
@@ -304,7 +318,7 @@ private fun RegistroContent(
                     )
 
                     Text(
-                        text = "Tipo de cuenta",
+                        text = stringResource(R.string.verification_ui_account_type),
                         fontSize = 12.sp,
                         color = TextoPrincipal
                     )
@@ -321,7 +335,7 @@ private fun RegistroContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RoleOption(
-                            text = "Participante",
+                            text = stringResource(R.string.verification_ui_participant),
                             selected = !state.isOrganizer,
                             modifier = Modifier.weight(1f),
                             onClick = {
@@ -330,13 +344,25 @@ private fun RegistroContent(
                         )
 
                         RoleOption(
-                            text = "Organizador",
+                            text = stringResource(R.string.verification_ui_organizer),
                             selected = state.isOrganizer,
                             modifier = Modifier.weight(1f),
                             onClick = {
                                 onAccountTypeChange(true)
                             }
                         )
+                    }
+
+                    if (state.isOrganizer) {
+                        Text(stringResource(R.string.verification_identity_label), fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.verification_registration_explanation), style = MaterialTheme.typography.bodySmall)
+                        state.identityPhotoUri?.let {
+                            RemoteImage(it, stringResource(R.string.verification_identity_label), Modifier.fillMaxWidth().height(160.dp))
+                        }
+                        TextButton(onClick = { identityPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
+                            Text(stringResource(if (state.identityPhotoUri == null) R.string.verification_choose_identity else R.string.verification_replace_identity))
+                        }
+                        state.identityPhotoError?.let { Text(localizedMessage(it), color = MaterialTheme.colorScheme.error) }
                     }
 
                     Row(
@@ -351,13 +377,13 @@ private fun RegistroContent(
                         )
 
                         Text(
-                            text = "Acepto los Términos y la Política de datos",
+                            text = stringResource(R.string.verification_ui_terms),
                             fontSize = 11.sp,
                             color = TextoSecundario
                         )
                     }
                     state.terminosError?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                        Text(localizedMessage(it), color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
             }
 
@@ -379,7 +405,7 @@ private fun RegistroContent(
                 )
             ) {
                 Text(
-                    text = "Crear cuenta",
+                    text = stringResource(R.string.verification_ui_register),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -422,7 +448,7 @@ private fun RegistroField(
         isError = error != null,
         supportingText = {
             when {
-                error != null -> Text(error)
+                error != null -> Text(localizedMessage(error))
                 supportingText != null -> Text(supportingText)
             }
         },

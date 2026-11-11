@@ -1,5 +1,10 @@
 package com.eventoscomunitarios.app.features.recuperar_contrasenia
 
+import com.eventoscomunitarios.app.core.util.localizedMessage
+
+import androidx.compose.ui.res.stringResource
+import com.eventoscomunitarios.app.R
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -71,11 +76,12 @@ fun RecuperarContrasenaScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val recoverySentMessage = stringResource(R.string.ui_recovery_sent)
 
     LaunchedEffect(state.solicitudValidada) {
         if (state.solicitudValidada) {
             snackbarHostState.showSnackbar(
-                "Si existe una cuenta con ese correo, recibirás un enlace para restablecer la contraseña."
+                recoverySentMessage
             )
             viewModel.clearSolicitudValidada()
         }
@@ -146,7 +152,7 @@ private fun RecuperarContrasenaContent(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ArrowBack,
-                                contentDescription = "Volver al inicio de sesión",
+                                contentDescription = stringResource(R.string.ui_back_login),
                                 tint = TextoPrincipal
                             )
                         }
@@ -160,7 +166,7 @@ private fun RecuperarContrasenaContent(
                 Spacer(modifier = Modifier.height(26.dp))
 
                 Text(
-                    text = "Recuperar contraseña",
+                    text = stringResource(R.string.ui_recover_password),
                     fontSize = 23.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = TextoPrincipal,
@@ -171,7 +177,7 @@ private fun RecuperarContrasenaContent(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "Ingresa el correo asociado a tu cuenta y te enviaremos instrucciones para restablecer tu contraseña.",
+                    text = stringResource(R.string.ui_recovery_help),
                     fontSize = 13.5.sp,
                     lineHeight = 20.sp,
                     color = TextoSecundario,
@@ -185,10 +191,10 @@ private fun RecuperarContrasenaContent(
                     value = state.email,
                     onValueChange = onEmailChange,
                     label = {
-                        Text("Correo electrónico")
+                        Text(stringResource(R.string.ui_email))
                     },
                     placeholder = {
-                        Text("nombre@ejemplo.com")
+                        Text(stringResource(R.string.ui_email_example))
                     },
                     leadingIcon = {
                         IconoCorreoRecuperacion()
@@ -196,7 +202,7 @@ private fun RecuperarContrasenaContent(
                     isError = state.emailError != null,
                     supportingText = {
                         state.emailError?.let { error ->
-                            Text(error)
+                            Text(localizedMessage(error))
                         }
                     },
                     singleLine = true,
@@ -229,7 +235,7 @@ private fun RecuperarContrasenaContent(
                     )
                 ) {
                     Text(
-                        text = if (state.isLoading) "Enviando…" else "Enviar instrucciones",
+                        text = if (state.isLoading) stringResource(R.string.ui_sending) else stringResource(R.string.ui_send_instructions),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -247,7 +253,7 @@ private fun RecuperarContrasenaContent(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Text(
-                        text = "Si el correo existe en nuestra plataforma, recibirás los pasos para recuperar el acceso.",
+                        text = stringResource(R.string.ui_recovery_privacy),
                         fontSize = 11.5.sp,
                         lineHeight = 16.sp,
                         color = TextoSecundario,
@@ -272,7 +278,7 @@ private fun RecuperarContrasenaContent(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "¿Recordaste tu contraseña?",
+                    text = stringResource(R.string.ui_remember_password),
                     fontSize = 13.sp,
                     color = TextoSecundario,
                     textAlign = TextAlign.Center
@@ -280,7 +286,7 @@ private fun RecuperarContrasenaContent(
 
                 TextButton(onClick = onNavigateBack) {
                     Text(
-                        text = "Volver a iniciar sesión",
+                        text = stringResource(R.string.ui_sign_in_again),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = azulPrincipal

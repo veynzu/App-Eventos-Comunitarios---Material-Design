@@ -1,5 +1,10 @@
 package com.eventoscomunitarios.app.core.components
 
+import com.eventoscomunitarios.app.core.util.localizedMessage
+
+import androidx.compose.ui.res.stringResource
+import com.eventoscomunitarios.app.R
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,32 +42,32 @@ fun ModerationEventCard(
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!compact && event.photoUri != null) {
-                RemoteImage(event.photoUri, "Foto de ${event.title}", Modifier.fillMaxWidth().height(160.dp))
+                RemoteImage(event.photoUri, stringResource(R.string.ui_photo_of, event.title), Modifier.fillMaxWidth().height(160.dp))
             }
             Text(event.title, style = MaterialTheme.typography.titleMedium)
             Text(event.organizerName, style = MaterialTheme.typography.bodySmall)
-            Text(if (event.isFinished) "Finalizado" else statusLabel(event.moderationStatus), color = MaterialTheme.colorScheme.primary)
+            Text(if (event.isFinished) stringResource(R.string.ui_finished) else statusLabel(event.moderationStatus), color = MaterialTheme.colorScheme.primary)
             if (!compact) {
-                Text("Inicio: ${event.dateLabel} · ${event.timeLabel}", style = MaterialTheme.typography.bodySmall)
-                Text("Fin: ${eventFormDate(event.endsAt)} · ${eventFormTime(event.endsAt)}", style = MaterialTheme.typography.bodySmall)
-                Text("${event.category.displayName} · ${event.location}", style = MaterialTheme.typography.bodySmall)
-                Text("${event.attendeeCount}/${event.capacity} asistentes", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.ui_start_datetime, event.dateLabel, event.timeLabel), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.ui_end_datetime, eventFormDate(event.endsAt), eventFormTime(event.endsAt)), style = MaterialTheme.typography.bodySmall)
+                Text("${event.category.localizedName()} · ${event.location}", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.ui_attendees_count, event.attendeeCount, event.capacity), style = MaterialTheme.typography.bodySmall)
             }
-            event.rejectionReason?.let { Text("Motivo: $it", color = MaterialTheme.colorScheme.error) }
-            OutlinedButton(onClick = onDetail) { Text("Ver detalle") }
+            event.rejectionReason?.let { Text(stringResource(R.string.ui_reason, it), color = MaterialTheme.colorScheme.error) }
+            OutlinedButton(onClick = onDetail) { Text(stringResource(R.string.ui_details)) }
             if (event.moderationStatus == EventModerationStatus.PENDING) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onReject) { Text("Rechazar") }
-                    Button(onClick = onApprove) { Text("Aprobar") }
+                    OutlinedButton(onClick = onReject) { Text(stringResource(R.string.ui_reject)) }
+                    Button(onClick = onApprove) { Text(stringResource(R.string.ui_approve)) }
                 }
             }
             if (onDelete != null || onFinish != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (onFinish != null && event.moderationStatus == EventModerationStatus.APPROVED && !event.isFinished && event.startsAt <= System.currentTimeMillis()) {
-                        TextButton(onClick = onFinish) { Text("Finalizar") }
+                        TextButton(onClick = onFinish) { Text(stringResource(R.string.ui_finish)) }
                     }
                     if (onDelete != null) {
-                        TextButton(onClick = onDelete) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }
+                        TextButton(onClick = onDelete) { Text(stringResource(R.string.ui_delete), color = MaterialTheme.colorScheme.error) }
                     }
                 }
             }
@@ -89,21 +94,22 @@ fun ModerationActionDialog(
                 if (reason != null) {
                     OutlinedTextField(
                         value = reason, onValueChange = onReasonChange,
-                        label = { Text("Motivo del rechazo") }, minLines = 3,
+                        label = { Text(stringResource(R.string.ui_rejection_reason)) }, minLines = 3,
                         isError = error != null,
-                        supportingText = error?.let { message -> { Text(message) } },
+                        supportingText = error?.let { message -> { Text(localizedMessage(message)) } },
                         modifier = Modifier.fillMaxWidth().testTag("rejection_reason")
                     )
-                } else if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
+                } else if (error != null) Text(localizedMessage(error), color = MaterialTheme.colorScheme.error)
             }
         },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Confirmar") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+        confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(R.string.ui_confirm)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_cancel)) } }
     )
 }
 
+@Composable
 private fun statusLabel(status: EventModerationStatus): String = when (status) {
-    EventModerationStatus.PENDING -> "Pendiente de revisión"
-    EventModerationStatus.APPROVED -> "Aprobado"
-    EventModerationStatus.REJECTED -> "Rechazado"
+    EventModerationStatus.PENDING -> stringResource(R.string.ui_pending)
+    EventModerationStatus.APPROVED -> stringResource(R.string.ui_approved)
+    EventModerationStatus.REJECTED -> stringResource(R.string.ui_rejected)
 }

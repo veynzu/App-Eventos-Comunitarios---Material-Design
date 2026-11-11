@@ -1,5 +1,10 @@
 package com.eventoscomunitarios.app.features.edit_event
 
+import com.eventoscomunitarios.app.core.util.localizedMessage
+
+import androidx.compose.ui.res.stringResource
+import com.eventoscomunitarios.app.R
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,16 +57,16 @@ fun EditEventScreen(
         RequestResult.Loading -> return LoadingIndicator()
         is RequestResult.Failure -> {
             Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
-                Text(result.message, color = MaterialTheme.colorScheme.error)
-                Button(onClick = onCloseClick) { Text("Volver") }
+                Text(localizedMessage(result.message), color = MaterialTheme.colorScheme.error)
+                Button(onClick = onCloseClick) { Text(stringResource(R.string.ui_back)) }
             }
             return
         }
         RequestResult.Success -> Unit
     }
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("Editar evento") }, navigationIcon = {
-            IconButton(onClick = onCloseClick) { Icon(Icons.Default.Close, "Cerrar") }
+        TopAppBar(title = { Text(stringResource(R.string.ui_edit_event)) }, navigationIcon = {
+            IconButton(onClick = onCloseClick) { Icon(Icons.Default.Close, stringResource(R.string.ui_close)) }
         })
         Box(Modifier.weight(1f).fillMaxWidth()) {
             Column(
@@ -70,32 +75,32 @@ fun EditEventScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 state.rejectionReason?.let {
-                    Text("Motivo del rechazo: $it", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.ui_rejection, it), color = MaterialTheme.colorScheme.error)
                 }
-                Text("Los cambios se enviarán nuevamente a moderación.", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.ui_changes_review), style = MaterialTheme.typography.bodySmall)
                 EventPhotoSelector(state.photoUri, viewModel::onPhotoSelected)
-                EventTextField(state.title, viewModel::onTitleChange, "Título del evento", state.titleError)
+                EventTextField(state.title, viewModel::onTitleChange, stringResource(R.string.ui_event_title), state.titleError)
                 EventCategorySelector(state.category, state.categoryError, viewModel::onCategoryChange)
                 EventOutdoorField(state.isOutdoor, viewModel::onOutdoorChange)
-                EventDateTimeFields("Inicio", state.date, state.time, state.dateError, state.timeError,
+                EventDateTimeFields(stringResource(R.string.ui_start), state.date, state.time, state.dateError, state.timeError,
                     viewModel::onDateChange, viewModel::onTimeChange)
-                EventDateTimeFields("Finalización", state.endDate, state.endTime, state.endDateError, state.endTimeError,
+                EventDateTimeFields(stringResource(R.string.ui_end), state.endDate, state.endTime, state.endDateError, state.endTimeError,
                     viewModel::onEndDateChange, viewModel::onEndTimeChange)
                 EventLocationField(state.address, state.coordinates, state.addressError, viewModel::openLocationPicker)
-                EventTextField(state.description, viewModel::onDescriptionChange, "Descripción", state.descriptionError, minLines = 3)
+                EventTextField(state.description, viewModel::onDescriptionChange, stringResource(R.string.ui_description), state.descriptionError, minLines = 3)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EventTextField(state.capacity, viewModel::onCapacityChange, "Cupo", state.capacityError, Modifier.weight(1f), numeric = true)
-                    EventTextField(state.price, viewModel::onPriceChange, "Precio (COP)", state.priceError,
+                    EventTextField(state.capacity, viewModel::onCapacityChange, stringResource(R.string.ui_capacity), state.capacityError, Modifier.weight(1f), numeric = true)
+                    EventTextField(state.price, viewModel::onPriceChange, stringResource(R.string.ui_price), state.priceError,
                         Modifier.weight(1f), numeric = true, enabled = !state.isFree)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Evento gratuito")
+                    Text(stringResource(R.string.ui_free_event))
                     Switch(checked = state.isFree, onCheckedChange = viewModel::onFreeChange)
                 }
-                Text("Cuando se complete el cupo, las personas podrán unirse a la lista de espera.",
+                Text(stringResource(R.string.ui_waitlist_help),
                     style = MaterialTheme.typography.bodySmall)
                 (state.saveResult as? RequestResult.Failure)?.let {
-                    Text(it.message, color = MaterialTheme.colorScheme.error)
+                    Text(localizedMessage(it.message), color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -103,16 +108,16 @@ fun EditEventScreen(
             onClick = viewModel::saveChanges,
             enabled = state.saveResult != RequestResult.Loading && state.saveResult != RequestResult.Success,
             modifier = Modifier.fillMaxWidth().padding(16.dp).imePadding()
-        ) { Text("Guardar y enviar a revisión") }
+        ) { Text(stringResource(R.string.ui_save_for_review)) }
     }
     if (state.showLocationPicker) LocationPickerDialog(state.coordinates, state.address, viewModel::closeLocationPicker, viewModel::onLocationSelected)
     if (state.saveResult == RequestResult.Loading) LoadingIndicator()
     if (state.saveResult == RequestResult.Success) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text("Evento enviado a revisión") },
-            text = { Text("Podrás seguir su estado en Mis eventos. Será visible en el inicio cuando un moderador lo apruebe.") },
-            confirmButton = { TextButton(onClick = { viewModel.clearSaveResult(); onChangesSaved() }) { Text("Aceptar") } }
+            title = { Text(stringResource(R.string.ui_event_submitted)) },
+            text = { Text(stringResource(R.string.ui_event_submitted_help)) },
+            confirmButton = { TextButton(onClick = { viewModel.clearSaveResult(); onChangesSaved() }) { Text(stringResource(R.string.ui_accept)) } }
         )
     }
 }

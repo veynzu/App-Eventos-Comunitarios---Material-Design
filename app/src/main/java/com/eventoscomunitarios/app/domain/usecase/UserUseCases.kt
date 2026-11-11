@@ -32,13 +32,16 @@ class UserUseCases @Inject constructor(
         user
     }
 
-    suspend fun register(name: String, email: String, password: String, phoneNumber: String?, role: UserRole): Result<User> = firebaseResult {
+    suspend fun register(name: String, email: String, password: String, phoneNumber: String?, role: UserRole, identityPhotoUri: String? = null): Result<User> = firebaseResult {
         validateProfile(name, email, phoneNumber)
         require(password.length >= 8) { "La contraseña debe tener al menos 8 caracteres" }
         require(role != UserRole.ADMINISTRATOR) { "No es posible registrar moderadores desde este formulario" }
         val draft = User(UUID.randomUUID().toString(), name.trim(), email.trim().lowercase(), role, Date(),
             phoneNumber = phoneNumber?.trim()?.takeIf { it.isNotBlank() })
-        val created = userRepository.register(draft, password)
+        require(role != UserRole.ORGANIZER || identityPhotoUri?.startsWith("content://") == true) {
+            "Adjunta una foto de tu cédula para solicitar la verificación"
+        }
+        val created = userRepository.register(draft, password, identityPhotoUri)
         // La cuenta ya fue creada; un fallo de un aviso secundario no debe presentarla como fallida.
         try { communityRepository.notify(created.id, "Bienvenido a Share You", "Publica, comenta y participa en los eventos de tu comunidad.") }
         catch (cancelled: CancellationException) { throw cancelled }
@@ -97,6 +100,9 @@ class UserUseCases @Inject constructor(
         eventUseCases.removeAccountData(userId)
         communityRepository.removeForUser(userId)
         user.profilePictureUrl?.let { mediaRepository?.deleteImage(it) }
+        if (user.role == UserRole.ORGANIZER) {
+            userRepository.organizerIdentityPath(userId)?.let { mediaRepository?.deleteImage(it) }
+        }
         userRepository.delete(userId)
     }
 
@@ -104,10 +110,42 @@ class UserUseCases @Inject constructor(
         require(requireActiveUser(actorId).role == UserRole.ADMINISTRATOR) { "Solo un moderador puede administrar usuarios" }
         val user = requireNotNull(findUser(userId)) { "Usuario no encontrado" }
         require(user.role != UserRole.ADMINISTRATOR) { "No se puede suspender a un moderador" }
-        val updated = user.copy(accountStatus = status)
+        val updated = user.copy(accountStatus = status,
+            organizerVerificationStatus = if (status == AccountStatus.ACTIVE && user.organizerVerificationStatus == OrganizerVerificationStatus.REJECTED)
+                OrganizerVerificationStatus.PENDING else user.organizerVerificationStatus)
         userRepository.save(updated)
         try { communityRepository.notify(userId, "Estado de cuenta actualizado",
             if (status == AccountStatus.ACTIVE) "Tu cuenta está activa." else "Un moderador suspendió tu cuenta.") }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { }
+        updated
+    }
+
+    suspend fun submitOrganizerIdentity(userId: String, photoUri: String): Result<User> = firebaseResult {
+        val user = requireActiveUser(userId)
+        require(user.role == UserRole.ORGANIZER && user.organizerVerificationStatus != OrganizerVerificationStatus.VERIFIED) { "Esta cuenta no necesita enviar documentos" }
+        require(photoUri.startsWith("content://")) { "Selecciona una foto de tu cédula" }
+        val media = requireNotNull(mediaRepository) { "El almacenamiento de imágenes no está disponible" }
+        val previous = userRepository.organizerIdentityPath(userId)
+        val uploaded = media.uploadImage(userId, photoUri, "identities")
+        val updated = try { userRepository.saveOrganizerIdentity(userId, uploaded) }
+        catch (error: Exception) { try { media.deleteImage(uploaded) } catch (_: Exception) { }; throw error }
+        if (previous != null && previous != uploaded) try { media.deleteImage(previous) } catch (_: Exception) { }
+        updated
+    }
+
+    suspend fun loadOrganizerIdentity(actorId: String, userId: String): Result<OrganizerIdentity> = firebaseResult {
+        require(requireActiveUser(actorId).role == UserRole.ADMINISTRATOR) { "Solo un administrador puede revisar documentos" }
+        require(findUser(userId)?.role == UserRole.ORGANIZER) { "La cuenta no es de un organizador" }
+        val path = requireNotNull(userRepository.organizerIdentityPath(userId)) { "El organizador aún no ha enviado su cédula" }
+        OrganizerIdentity(path, requireNotNull(mediaRepository).readPrivateImage(path))
+    }
+
+    suspend fun reviewOrganizerIdentity(actorId: String, userId: String, expectedPhotoPath: String, approve: Boolean): Result<User> = firebaseResult {
+        require(requireActiveUser(actorId).role == UserRole.ADMINISTRATOR) { "Solo un administrador puede verificar organizadores" }
+        val updated = userRepository.reviewOrganizerIdentity(userId, expectedPhotoPath, approve)
+        try { communityRepository.notify(userId, "Verificación de identidad",
+            if (approve) "Tu identidad fue verificada. Ya puedes crear eventos." else "Tu cuenta fue bloqueada después de revisar el documento de identidad.") }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { }
         updated

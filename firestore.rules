@@ -23,7 +23,7 @@ service cloud.firestore {
         ])
         && profile.keys().hasOnly([
           'id', 'name', 'email', 'role', 'registrationDate',
-          'profilePictureUrl', 'phoneNumber', 'accountStatus', 'pendingEmail'
+          'profilePictureUrl', 'phoneNumber', 'accountStatus', 'pendingEmail', 'organizerVerificationStatus'
         ])
         && profile.id == uid
         && profile.name is string && profile.name.size() > 0
@@ -31,6 +31,7 @@ service cloud.firestore {
         && profile.email == request.auth.token.email
         && profile.role in ['PARTICIPANT', 'ORGANIZER', 'ADMINISTRATOR']
         && profile.accountStatus in ['ACTIVE', 'SUSPENDED']
+        && profile.get('organizerVerificationStatus', 'PENDING') in ['NOT_REQUIRED', 'PENDING', 'VERIFIED', 'REJECTED']
         && profile.registrationDate is timestamp
         && (profile.profilePictureUrl == null || profile.profilePictureUrl is string)
         && (profile.phoneNumber == null || profile.phoneNumber is string)
@@ -46,22 +47,59 @@ service cloud.firestore {
         && validProfile(uid)
         && request.resource.data.role in ['PARTICIPANT', 'ORGANIZER']
         && request.resource.data.accountStatus == 'ACTIVE'
-        && request.resource.data.pendingEmail == null;
+        && request.resource.data.pendingEmail == null
+        && request.resource.data.get('organizerVerificationStatus', request.resource.data.role == 'ORGANIZER' ? 'PENDING' : 'NOT_REQUIRED')
+          == (request.resource.data.role == 'ORGANIZER' ? 'PENDING' : 'NOT_REQUIRED');
 
       allow update: if (
           isSelf(uid)
           && resource.data.accountStatus == 'ACTIVE'
           && validProfile(uid)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'name', 'email', 'phoneNumber', 'profilePictureUrl', 'pendingEmail'
+            'name', 'email', 'phoneNumber', 'profilePictureUrl', 'pendingEmail', 'organizerVerificationStatus'
           ])
+          && (request.resource.data.get('organizerVerificationStatus', 'PENDING') == resource.data.get('organizerVerificationStatus', 'PENDING')
+            || (resource.data.role == 'ORGANIZER' && resource.data.get('organizerVerificationStatus', 'PENDING') != 'VERIFIED'
+              && request.resource.data.organizerVerificationStatus == 'PENDING'
+              && existsAfter(/databases/$(database)/documents/organizerVerifications/$(uid))))
         ) || (
           isModerator()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['accountStatus'])
+          && resource.data.role != 'ADMINISTRATOR'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['accountStatus', 'organizerVerificationStatus'])
           && request.resource.data.accountStatus in ['ACTIVE', 'SUSPENDED']
+          && (request.resource.data.get('organizerVerificationStatus', 'PENDING') == resource.data.get('organizerVerificationStatus', 'PENDING')
+            || (resource.data.role == 'ORGANIZER' && (
+              (request.resource.data.organizerVerificationStatus == 'PENDING' && request.resource.data.accountStatus == 'ACTIVE'
+                && resource.data.get('organizerVerificationStatus', 'PENDING') == 'REJECTED')
+              || (resource.data.get('organizerVerificationStatus', 'PENDING') == 'PENDING'
+                && exists(/databases/$(database)/documents/organizerVerifications/$(uid))
+                && ((request.resource.data.organizerVerificationStatus == 'VERIFIED' && request.resource.data.accountStatus == 'ACTIVE')
+                  || (request.resource.data.organizerVerificationStatus == 'REJECTED' && request.resource.data.accountStatus == 'SUSPENDED')))
+            )))
         );
 
       allow delete: if isSelf(uid);
+    }
+
+    // Los documentos se separan de los perfiles que consulta toda la comunidad.
+    match /organizerVerifications/{uid} {
+      allow get: if isSelf(uid) || isModerator();
+      allow create, update: if isSelf(uid)
+        && getAfter(/databases/$(database)/documents/users/$(uid)).data.role == 'ORGANIZER'
+        && getAfter(/databases/$(database)/documents/users/$(uid)).data.accountStatus == 'ACTIVE'
+        && getAfter(/databases/$(database)/documents/users/$(uid)).data.get('organizerVerificationStatus', 'PENDING') == 'PENDING'
+        && request.resource.data.keys().hasOnly(['userId', 'photoPath', 'submittedAt'])
+        && request.resource.data.userId == uid
+        && request.resource.data.photoPath is string
+        && request.resource.data.photoPath.matches('gs://[^/]+/identities/' + uid + '/[^/]+')
+        && request.resource.data.submittedAt is timestamp;
+      allow delete: if isSelf(uid);
+    }
+
+    function canPublish() {
+      let user = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return active() && (user.role == 'ADMINISTRATOR' || (user.role == 'ORGANIZER'
+        && user.get('organizerVerificationStatus', 'PENDING') == 'VERIFIED'));
     }
 
     function active() {
@@ -161,7 +199,7 @@ service cloud.firestore {
     match /events/{eventId} {
       // Los listeners actuales consultan la colección completa y filtran en la UI.
       allow read: if signedIn();
-      allow create: if active() && validEvent(request.resource.data)
+      allow create: if canPublish() && validEvent(request.resource.data)
         && eventId == string(request.resource.data.id)
         && request.resource.data.organizerId == request.auth.uid
         && request.resource.data.organizerName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
@@ -192,7 +230,7 @@ service cloud.firestore {
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'isDeleted', 'attendeeCount', 'registrations', 'registrationUserIds', 'revision', 'lastActorId', 'promotedUserId', 'seriesId', 'previousEventId', 'locationConfirmed', 'isOutdoor'
               ]))
-            || (!resource.data.isFinished && resource.data.startsAt > request.time.toMillis()
+            || (canPublish() && !resource.data.isFinished && resource.data.startsAt > request.time.toMillis()
               && request.resource.data.locationConfirmed && request.resource.data.startsAt > request.time.toMillis()
               && request.resource.data.moderationStatus == 'PENDING' && request.resource.data.rejectionReason == null
               && request.resource.data.registrations == resource.data.registrations

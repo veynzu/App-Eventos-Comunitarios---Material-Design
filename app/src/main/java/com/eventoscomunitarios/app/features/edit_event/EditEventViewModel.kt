@@ -108,7 +108,7 @@ class EditEventViewModel @Inject constructor(
         val state = _uiState.value
         if (!state.isFormValid) return
         val current = state.eventId?.let(events::findEvent)
-        if (current == null || !events.canManage(userId, current)) {
+        if (current == null || !events.canPublish(userId) || !events.canManage(userId, current)) {
             update { copy(saveResult = RequestResult.Failure("No tienes permiso para editar este evento")) }
             return
         }
@@ -150,7 +150,7 @@ class EditEventViewModel @Inject constructor(
         update {
             when {
                 event == null -> copy(loadResult = RequestResult.Failure("Evento no encontrado"))
-                !events.canManage(userId, event) -> copy(loadResult = RequestResult.Failure("No tienes permiso para editar este evento"))
+                !events.canPublish(userId) || !events.canManage(userId, event) -> copy(loadResult = RequestResult.Failure("No tienes permiso para editar este evento"))
                 event.isFinished || event.startsAt <= System.currentTimeMillis() ->
                     copy(loadResult = RequestResult.Failure("Solo se pueden editar eventos que aún no han iniciado"))
                 formLoaded -> copy(loadResult = RequestResult.Success)

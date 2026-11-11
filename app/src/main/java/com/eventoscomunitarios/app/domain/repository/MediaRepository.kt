@@ -4,4 +4,5 @@ package com.eventoscomunitarios.app.domain.repository
 interface MediaRepository {
     suspend fun uploadImage(userId: String, localUri: String, folder: String): String
     suspend fun deleteImage(url: String)
+    suspend fun readPrivateImage(path: String): ByteArray = error("No se puede cargar el documento de identidad")
 }

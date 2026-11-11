@@ -26,6 +26,7 @@ class InMemoryEventRepository : EventRepository {
 
     override suspend fun nextId(): Int = mutex.withLock { nextEventId++ }
     override suspend fun create(actor: User, event: Event): Event = mutex.withLock {
+        require(actor.canCreateEvents) { "Solo un organizador verificado o un administrador puede publicar eventos" }
         require(events.value.none { it.id == event.id }) { "El evento ya existe" }
         putEvent(event)
         event

@@ -4,6 +4,7 @@ import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eventoscomunitarios.app.core.util.RequestResult
+import com.eventoscomunitarios.app.core.util.AppLanguageStore
 import com.eventoscomunitarios.app.domain.model.User
 import com.eventoscomunitarios.app.domain.model.UserStatistics
 import com.eventoscomunitarios.app.domain.usecase.CommunityUseCases
@@ -37,17 +38,19 @@ data class ProfileUiState(
     val showDeleteConfirmation: Boolean = false,
     val accountDeleted: Boolean = false,
     val message: String? = null,
-    val syncError: String? = null
+    val syncError: String? = null,
+    val languageTag: String = ""
 )
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val users: UserUseCases,
     private val events: EventUseCases,
-    private val community: CommunityUseCases
+    private val community: CommunityUseCases,
+    private val languageStore: AppLanguageStore? = null
 ) : ViewModel() {
     private var userId: String = ""
-    private val _uiState = MutableStateFlow(ProfileUiState())
+    private val _uiState = MutableStateFlow(ProfileUiState(languageTag = languageStore?.languageTag.orEmpty()))
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
     init {
@@ -61,7 +64,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun loadUser(userId: String) {
-        if (this.userId != userId) _uiState.value = ProfileUiState()
+        if (this.userId != userId) _uiState.value = ProfileUiState(languageTag = languageStore?.languageTag.orEmpty())
         this.userId = userId
         refresh()
     }
@@ -136,6 +139,25 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun clearMessage() { _uiState.update { it.copy(message = null) } }
+
+    fun onLanguageSelected(languageTag: String) {
+        if (languageTag !in com.eventoscomunitarios.app.core.util.AppLanguage.supportedTags) return
+        languageStore?.save(languageTag)
+        _uiState.update { it.copy(languageTag = languageTag) }
+    }
+
+    fun submitOrganizerIdentity(photoUri: String?) {
+        if (photoUri == null || _uiState.value.isBusy) return
+        _uiState.update { it.copy(isBusy = true) }
+        viewModelScope.launch {
+            users.submitOrganizerIdentity(userId, photoUri).fold(
+                onSuccess = { _uiState.update { current -> current.copy(isBusy = false,
+                    message = "Cédula enviada. Tu cuenta está pendiente de revisión administrativa.") }; refresh() },
+                onFailure = { failure -> _uiState.update { current -> current.copy(isBusy = false,
+                    message = failure.message ?: "No se pudo enviar la cédula") } }
+            )
+        }
+    }
 
     private fun refresh() {
         val user = users.findUser(userId)

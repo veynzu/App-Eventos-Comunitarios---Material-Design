@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">Share You</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_map">Map</string>
+    <string name="nav_my_events">My events</string>
+    <string name="nav_profile">Profile</string>
+    <string name="nav_admin">Admin</string>
+    <string name="nav_admin_dashboard">Dashboard</string>
+    <string name="nav_admin_moderation">Moderation</string>
+    <string name="nav_admin_users">Users</string>
+    <string name="nav_create_event">Create event</string>
+    <string name="event_distance_km">%1$.1f km</string>
+    <string name="choose_location">Choose on the map</string>
+    <string name="confirm_location">Confirm location</string>
+    <string name="use_current_location">My current location</string>
+    <string name="tap_map_location">Tap the exact location of the event or the area you want to search.</string>
+    <string name="location_address_reference">Address or location reference</string>
+    <string name="map_not_available">The map is unavailable. Check its configuration and your connection.</string>
+    <string name="event_location">Event location</string>
+    <string name="outdoor_event">Outdoor activity</string>
+    <string name="back">Back</string>
+    <string name="search_in_another_area">Search another area</string>
+    <string name="relaunch_event">Launch again</string>
+    <string name="new_event_edition">New edition of the event</string>
+    <string name="relaunch_event_help">Choose new dates. The previous details are kept and this edition requires administrator approval.</string>
+    <string name="comments_participants_only">Only confirmed participants can comment after the event has finished.</string>
+</resources>

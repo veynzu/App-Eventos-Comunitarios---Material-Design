@@ -1,5 +1,13 @@
 package com.eventoscomunitarios.app.features.notifications
 
+import com.eventoscomunitarios.app.core.util.localizedMessage
+import com.eventoscomunitarios.app.core.util.localizedNotificationMessage
+
+import androidx.compose.ui.platform.LocalContext
+
+import androidx.compose.ui.res.stringResource
+import com.eventoscomunitarios.app.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,9 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.eventoscomunitarios.app.core.components.LoadingIndicator
-import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,6 +56,7 @@ fun NotificationsScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val snackbar = snackbarHostState
     LaunchedEffect(state.openEventId) {
         state.openEventId?.let { eventId ->
@@ -59,30 +66,30 @@ fun NotificationsScreen(
     }
     LaunchedEffect(state.message) {
         state.message?.let {
-            snackbar.showSnackbar(it)
+            snackbar.showSnackbar(context.localizedMessage(it))
             viewModel.clearMessage()
         }
     }
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text("Notificaciones") },
+            title = { Text(stringResource(R.string.ui_notifications)) },
             navigationIcon = {
-                IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
+                IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.ui_back)) }
             }
         )
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 state.isLoading -> LoadingIndicator()
                 state.error != null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text(state.error.orEmpty(), color = MaterialTheme.colorScheme.error)
+                    Text(localizedMessage(state.error.orEmpty()), color = MaterialTheme.colorScheme.error)
                 }
                 state.items.isEmpty() -> Column(
                     Modifier.fillMaxSize().padding(32.dp),
                     verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(Icons.Default.NotificationsNone, contentDescription = null, modifier = Modifier.size(56.dp))
-                    Text("Aún no tienes notificaciones", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
-                    Text("Aquí encontrarás las novedades de tus eventos, comentarios y lista de espera.", modifier = Modifier.padding(top = 8.dp))
+                    Text(stringResource(R.string.ui_no_notifications), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+                    Text(stringResource(R.string.ui_notifications_help), modifier = Modifier.padding(top = 8.dp))
                 }
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -91,8 +98,8 @@ fun NotificationsScreen(
                     if (state.isSaving) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
                     item {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("${state.unreadCount} sin leer", modifier = Modifier.weight(1f))
-                            TextButton(onClick = viewModel::markAllRead, enabled = state.unreadCount > 0 && !state.isSaving) { Text("Marcar todas leídas") }
+                            Text(stringResource(R.string.ui_unread_count, state.unreadCount), modifier = Modifier.weight(1f))
+                            TextButton(onClick = viewModel::markAllRead, enabled = state.unreadCount > 0 && !state.isSaving) { Text(stringResource(R.string.ui_mark_all_read)) }
                         }
                     }
                     items(state.items, key = { it.notification.id }) { item ->
@@ -107,17 +114,17 @@ fun NotificationsScreen(
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     if (!notification.isRead) Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
-                                    Text(notification.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                    Text(localizedMessage(notification.title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                                 }
-                                Text(notification.message)
-                                Text(SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("es-CO")).format(Date(notification.createdAt)),
+                                Text(localizedNotificationMessage(notification))
+                                Text(java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT, androidx.compose.ui.platform.LocalConfiguration.current.locales[0]).format(Date(notification.createdAt)),
                                     style = MaterialTheme.typography.bodySmall)
                                 Text(
                                     when {
-                                        item.canOpenEvent -> "Ver publicación"
-                                        notification.eventId != null -> "La publicación ya no está disponible"
-                                        notification.isRead -> "Leída"
-                                        else -> "Toca para marcar como leída"
+                                        item.canOpenEvent -> stringResource(R.string.ui_view_post)
+                                        notification.eventId != null -> stringResource(R.string.ui_post_unavailable)
+                                        notification.isRead -> stringResource(R.string.ui_read)
+                                        else -> stringResource(R.string.ui_mark_read)
                                     }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary
                                 )
                             }
