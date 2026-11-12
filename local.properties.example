@@ -1,0 +1,6 @@
+# Copiar estas claves a local.properties sin reemplazar la ruta SDK que genere Android Studio.
+# Ajustar sdk.dir al SDK instalado en el equipo del colaborador. Usar / en rutas Windows.
+sdk.dir=C:/Users/TU_USUARIO/AppData/Local/Android/Sdk
+
+# Token publico de Mapbox (pk.). Reemplazar localmente; local.properties no se versiona.
+MAPBOX_ACCESS_TOKEN=pk.REEMPLAZAR_CON_TOKEN_PUBLICO

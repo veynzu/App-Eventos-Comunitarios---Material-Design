@@ -35,6 +35,64 @@ Se conservan `core`, `domain`, `features` y `navigation`. Las versiones se admin
 
 ## Configuración del proyecto
 
+### Ejecutar la misma versión en el equipo de un compañero
+
+El repositorio contiene código y dependencias; dos archivos de configuración local están excluidos de Git. Para utilizar los mismos servicios desplegados, conservar `applicationId=com.eventoscomunitarios.app` y el proyecto Firebase `share-you-6a706`.
+
+1. Subir todos los cambios de la versión, incluidos los archivos nuevos que muestra `git status --short`: código Android, recursos ES/EN, pruebas, `functions/src`, `functions/package.json`, `functions/package-lock.json`, `firebase.json`, `.firebaserc`, scripts, Gradle y documentación. No se necesitan `build`, `functions/lib` ni `node_modules`; se generan localmente.
+2. El compañero clona el repositorio o hace `git pull` de la misma rama/commit y abre la carpeta raíz `appMovil` en Android Studio.
+3. Instala/configura un Android Studio compatible con AGP 9.4.1, Android SDK Platform 37 y Microsoft OpenJDK 25 completo para Gradle. El wrapper incluido descarga Gradle 9.6.0. No debe sustituir versiones del catálogo para resolver la configuración de su equipo.
+4. Coloca en `app/google-services.json` el archivo de la aplicación Android ya registrada en **Share You**. Puede recibir una copia del archivo actual por el canal del equipo o descargarlo desde [Firebase Console](https://console.firebase.google.com/project/share-you-6a706/settings/general) → Configuración del proyecto → Tus apps → `com.eventoscomunitarios.app` → Descargar `google-services.json`. No necesita crear otra app Firebase ni otro proyecto. Ese archivo no contiene la credencial de Gemini.
+5. Conserva el `sdk.dir` de `local.properties` que genere Android Studio en su máquina y añade `MAPBOX_ACCESS_TOKEN` con el token público Mapbox del equipo o uno propio. Consultar `local.properties.example`; las rutas deben corresponder a su equipo. No copiar el `sdk.dir` de otro desarrollador.
+6. Sincroniza Gradle y ejecuta la variante **debug** con internet en un emulador `x86_64` con Google APIs o un teléfono `arm64`, Android 7/API 24 o posterior. La compilación utiliza API 37; el dispositivo no necesita ser API 37. Para las capturas, inicia sesión o registra una cuenta con el rol correspondiente; los roles administrativos se asignan desde el proyecto, no desde el registro público.
+
+Ejemplo de la configuración local; reemplazar ruta y token:
+
+```properties
+sdk.dir=C:/Users/TU_USUARIO/AppData/Local/Android/Sdk
+MAPBOX_ACCESS_TOKEN=pk.REEMPLAZAR_CON_TOKEN_PUBLICO
+```
+
+| Elemento | Cómo llega al compañero |
+| --- | --- |
+| Código Kotlin, XML, Gradle, scripts y fuentes de Functions | Git; sincronizar la misma rama y commit. |
+| `app/google-services.json` | Copia del equipo o descarga desde el proyecto Firebase existente. Está excluido de Git. |
+| `local.properties` | Lo configura en su PC con su ruta SDK y un token público Mapbox. Está excluido de Git. |
+| `GEMINI_API_KEY` | Permanece en Secret Manager. La app llama a las funciones desplegadas; no necesita esta clave en su PC ni APK. |
+| App Check | Desactivado en Android y en las funciones de IA; no requiere registrar dispositivos. |
+| `functions/.env.share-you-6a706` | Solo para quien administre/despliegue el backend. No hace falta para ejecutar la app Android. |
+
+### Acceso del equipo
+
+App Check está desactivado para esta entrega académica. No se instalan sus proveedores debug/Play Integrity en Android ni se exige su token en `aiStatus`, `analyzeText` o `analyzeEventDraft`. El compañero y el docente pueden ejecutar la APK sin registrar el emulador/teléfono ni recibir permisos de administración de App Check.
+
+Las funciones de IA conservan Firebase Authentication, la comprobación de cuenta activa, los roles necesarios para analizar eventos y la cuota diaria. Firestore y Storage conservan sus reglas de acceso. La cuenta para acceder a la app se administra por Firebase Authentication, independientemente de los permisos de desarrollador en Google Cloud.
+
+Dentro de la aplicación, las vistas y acciones siguen dependiendo del perfil `users/{uid}` de su cuenta Firebase Authentication: `PARTICIPANT`, `ORGANIZER` verificado o `ADMINISTRATOR`. Invitar su correo como visualizador del proyecto no crea ni convierte automáticamente su cuenta de la aplicación en administradora.
+
+### Compilar o trabajar en el backend
+
+Para compilar Android y ejecutar las pruebas JVM desde la raíz:
+
+```powershell
+.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest --no-daemon
+```
+
+Para trabajar además en las fuentes de Cloud Functions, instalar Node.js 22 y ejecutar:
+
+```powershell
+npm --prefix functions ci
+npm --prefix functions run check
+```
+
+Node, Firebase CLI y Google Cloud CLI no son necesarios para ejecutar la app Android. No necesita desplegar de nuevo las funciones ni las reglas para usar el backend actual. El despliegue es una tarea del responsable del backend, con su configuración local y permisos; está documentado en [functions/README.md](functions/README.md).
+
+### Capturas y alcance del informe
+
+Para solo instalar y hacer capturas, se puede compartir `app/build/outputs/apk/debug/app-debug.apk`, ya compilada con Firebase y Mapbox. En ese caso no necesita Android Studio ni configurar los archivos anteriores. La APK se comparte por el canal de entrega del equipo, no se genera al hacer `git pull`.
+
+La versión actual tiene prevalidaciones de IA desplegadas y probadas, pero los formularios todavía no las llaman. El informe debe distinguir el backend validado de la integración de UI, guardado validado en servidor y “Aportar información”, que siguen pendientes. Los resultados de pruebas locales bajo `build/` y `app/build/` tampoco viajan por Git; se pueden reproducir con los comandos documentados o compartir sus informes por el canal de entrega.
+
 La aplicación Android `com.eventoscomunitarios.app` usa `share-you-6a706`, definido en `app/google-services.json`. El plugin Google Services lo procesa y los tres SDK comparten la aplicación Firebase predeterminada. No requiere `.env` ni claves de cuentas de servicio.
 
 En la consola deben estar disponibles:
@@ -98,7 +156,7 @@ Los eventos anteriores sin `locationConfirmed` se consideran sin ubicación conf
 
 ## Compilar y comprobar
 
-La configuración de Cloud Functions para análisis con IA, pruebas y pasos pendientes está en [functions/README.md](functions/README.md). Están desplegadas las prevalidaciones `analyzeText` y `analyzeEventDraft` con Gemini y App Check, además de `aiStatus`. Gemini usa un proyecto independiente sin facturación. Los formularios de publicar/comentar todavía no llaman a estas prevalidaciones; falta integrar sus resultados y el guardado validado en el servidor.
+La configuración de Cloud Functions para análisis con IA, pruebas y pasos pendientes está en [functions/README.md](functions/README.md). Están desplegadas las prevalidaciones `analyzeText` y `analyzeEventDraft` con Gemini, además de `aiStatus`. Requieren sesión y los permisos correspondientes, sin App Check. Gemini usa un proyecto independiente sin facturación. Los formularios de publicar/comentar todavía no llaman a estas prevalidaciones; falta integrar sus resultados y el guardado validado en el servidor.
 
 Abrir en Android Studio, sincronizar Gradle y ejecutar `app`. Se mantienen SDK/Gradle del proyecto. El criterio JVM solicita **Microsoft OpenJDK 25** (`toolchainVendor=MICROSOFT`); `JAVA_HOME` debe apuntar a un **JDK completo**, con `jlink`. Usar el mismo JDK para Gradle en Android Studio. El proveedor se fija en `gradle/gradle-daemon-jvm.properties` porque esos criterios tienen prioridad sobre el JDK seleccionado en el IDE y evitan reutilizar el Java incompleto de una extensión.
 

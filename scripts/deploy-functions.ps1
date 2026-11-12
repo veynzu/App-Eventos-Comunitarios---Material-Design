@@ -11,9 +11,6 @@ if ($Stage -eq 'Analysis') {
     if (-not ($settings -match '^AI_ENABLED=true$') -or -not ($settings -match '^GEMINI_MODEL=\S+$')) {
         throw 'Falta activar AI_ENABLED y seleccionar GEMINI_MODEL. La clave se registra por separado en Secret Manager.'
     }
-    if (-not ($settings -match '^AI_ENFORCE_APP_CHECK=true$')) {
-        throw 'Configura y verifica App Check antes de desplegar el analisis con AI_ENFORCE_APP_CHECK=true.'
-    }
     $filter = 'functions:share-you-ai'
 }
 Push-Location $projectRoot

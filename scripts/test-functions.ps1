@@ -20,7 +20,7 @@ try {
         if ((Test-Path -LiteralPath $localEnvFile) -or (Test-Path -LiteralPath (Join-Path $projectRoot 'functions/.secret.local'))) {
             throw 'Aparta functions/.env.local y functions/.secret.local antes de las pruebas automáticas: estas no usan Gemini real.'
         }
-        [IO.File]::WriteAllText($localEnvFile, "AI_ENABLED=false`nGEMINI_MODEL=`nAI_ENFORCE_APP_CHECK=false`n", [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($localEnvFile, "AI_ENABLED=false`nGEMINI_MODEL=`n", [Text.UTF8Encoding]::new($false))
         $previousAiEnabled = $env:AI_ENABLED
         $previousModel = $env:GEMINI_MODEL
         $previousProject = $env:GCLOUD_PROJECT

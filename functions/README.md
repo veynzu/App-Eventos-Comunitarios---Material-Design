@@ -4,7 +4,7 @@
 
 Proyecto: `share-you-6a706`. Región: `us-central1`. Backend: Cloud Functions de segunda generación, TypeScript y Node.js 22. La app Android utiliza el SDK `firebase-functions` incluido en el Firebase BoM existente y Hilt proporciona `FirebaseFunctions.getInstance("us-central1")`.
 
-Están desplegadas `aiStatus`, `analyzeText` y `analyzeEventDraft`. Exigen sesión Firebase, perfil activo y App Check válido; el análisis de eventos exige además organizador verificado o administrador. `aiStatus` devuelve `enabled=true`, `modelConfigured=true` y `appCheckEnforced=true` con la configuración actual.
+Están desplegadas `aiStatus`, `analyzeText` y `analyzeEventDraft`. Exigen sesión Firebase y perfil activo; el análisis de eventos exige además organizador verificado o administrador. App Check está desactivado para esta entrega académica y no requiere registrar dispositivos. `aiStatus` devuelve `enabled=true`, `modelConfigured=true` y `appCheckEnforced=false`. Se conserva ese campo del contrato para compatibilidad.
 
 Son **prevalidaciones**, todavía no están conectadas a los formularios ni autorizan escrituras. Por eso el contrato conserva `preparationOnly=true`. No equivalen a implementar por completo los tres requisitos académicos: la publicación actual y la aprobación administrativa conservan su comportamiento.
 
@@ -23,15 +23,12 @@ Gemini se consume desde el proyecto independiente **Share You IA**, ID `gen-lang
 - `app/src/main/java/com/eventoscomunitarios/app/domain/usecase/ContentAnalysisUseCases.kt`: casos de uso.
 - `app/src/main/java/com/eventoscomunitarios/app/core/data/FirebaseContentAnalysisRepository.kt`: llamadas autenticadas a Functions.
 - `app/src/main/java/com/eventoscomunitarios/app/core/data/InMemoryContentAnalysisRepository.kt`: fixtures explícitas para pruebas; no aprueba automáticamente.
-- `app/src/debug/java/com/eventoscomunitarios/app/core/util/AppCheckSetup.kt`: proveedor App Check debug, incluido solo en debug.
-- `app/src/release/java/com/eventoscomunitarios/app/core/util/AppCheckSetup.kt`: proveedor Play Integrity de release.
-- `scripts/register-appcheck-debug-token.py`: registra el dispositivo de desarrollo sin imprimir ni guardar su secreto.
 
 `DashboardNavigation.kt` conserva la navegación. El análisis pertenece a casos de uso, repositorios y backend.
 
 ## Configuración de infraestructura
 
-Se habilitan `cloudfunctions.googleapis.com`, `cloudbuild.googleapis.com`, `artifactregistry.googleapis.com`, `run.googleapis.com`, `eventarc.googleapis.com`, `pubsub.googleapis.com`, `secretmanager.googleapis.com`, `firebaseappcheck.googleapis.com` y `playintegrity.googleapis.com`. La API de Gemini `generativelanguage.googleapis.com` está disponible en el proyecto de IA. Cloud Billing API permite comprobar el plan Blaze. Firebase CLI puede habilitar además `firebaseextensions.googleapis.com` durante el análisis del despliegue.
+Se utilizan `cloudfunctions.googleapis.com`, `cloudbuild.googleapis.com`, `artifactregistry.googleapis.com`, `run.googleapis.com`, `eventarc.googleapis.com`, `pubsub.googleapis.com` y `secretmanager.googleapis.com`. La API de Gemini `generativelanguage.googleapis.com` está disponible en el proyecto de IA. Cloud Billing API permite comprobar el plan Blaze. Firebase CLI puede habilitar además `firebaseextensions.googleapis.com` durante el análisis del despliegue. Las APIs de App Check/Play Integrity habilitadas anteriormente no son un requisito de esta versión.
 
 Cuenta de ejecución dedicada: `share-you-functions@share-you-6a706.iam.gserviceaccount.com`.
 
@@ -54,7 +51,7 @@ npm --prefix functions ci
 .\scripts\deploy-functions.ps1
 ```
 
-El script de despliegue utiliza por defecto `--only functions:share-you-ai:aiStatus --project share-you-6a706`. Con `-Stage Analysis` despliega las tres funciones y comprueba que IA, modelo y App Check estén configurados. No despliega reglas ni elimina funciones. `firebase init` no es necesario: la configuración ya está creada. También utiliza Google Cloud CLI, instalado en este equipo, para desactivar la comprobación IAM de invocación de los servicios Cloud Run correspondientes: el token del usuario lo verifica Firebase Auth dentro de cada función. Así se evita rechazar un JWT Firebase por no ser una identidad IAM de Google Cloud. Sin sesión, sin App Check o con una cuenta suspendida, las funciones rechazan el acceso.
+El script de despliegue utiliza por defecto `--only functions:share-you-ai:aiStatus --project share-you-6a706`. Con `-Stage Analysis` despliega las tres funciones y comprueba que IA y modelo estén configurados. No despliega reglas ni elimina funciones. `firebase init` no es necesario: la configuración ya está creada. También utiliza Google Cloud CLI, instalado en este equipo, para desactivar la comprobación IAM de invocación de los servicios Cloud Run correspondientes: el token del usuario lo verifica Firebase Auth dentro de cada función. Así se evita rechazar un JWT Firebase por no ser una identidad IAM de Google Cloud. Sin sesión o con una cuenta suspendida, las funciones rechazan el acceso.
 
 Se configuró limpieza de imágenes de compilación del repositorio `gcf-artifacts` de `us-central1` a los siete días. No elimina imágenes de publicaciones en Firebase Storage ni afecta los contenedores en ejecución. Para repetir esa configuración:
 
@@ -82,7 +79,7 @@ Para reemplazar la clave posteriormente, crearla en el proyecto de IA y guardarl
 firebase functions:secrets:set GEMINI_API_KEY --project share-you-6a706
 ```
 
-El archivo local `functions/.env.share-you-6a706` contiene `AI_ENABLED=true`, `GEMINI_MODEL=gemini-3.1-flash-lite`, `AI_ENFORCE_APP_CHECK=true` y `AI_DAILY_LIMIT=20`. Está excluido de Git y no contiene la clave. La plantilla `.env.example` conserva la IA desactivada hasta configurar el entorno. Reiniciar/recompilar no sustituye un nuevo despliegue:
+El archivo local `functions/.env.share-you-6a706` contiene `AI_ENABLED=true`, `GEMINI_MODEL=gemini-3.1-flash-lite` y `AI_DAILY_LIMIT=20`. Está excluido de Git y no contiene la clave. La plantilla `.env.example` conserva la IA desactivada hasta configurar el entorno. Reiniciar/recompilar no sustituye un nuevo despliegue:
 
 ```powershell
 .\scripts\deploy-functions.ps1 -Stage Analysis
@@ -90,23 +87,11 @@ El archivo local `functions/.env.share-you-6a706` contiene `AI_ENABLED=true`, `G
 
 Al activar `AI_ENABLED`, las funciones de análisis vinculan el secreto; Firebase CLI requiere que exista y configura el acceso de la cuenta de ejecución.
 
-### App Check durante desarrollo
+### Acceso del equipo
 
-`ShareYouApplication` instala App Check antes de usar los repositorios Firebase. Gradle incluye el proveedor debug solo en debug y Play Integrity solo en release, coordinados por el mismo BoM Firebase. Se registró la huella SHA-256 del certificado de depuración local y se verificó un token válido desde un emulador Android.
+Android no instala proveedores de App Check y las tres funciones declaran `enforceAppCheck: false` explícitamente. No hay variable de entorno que active este requisito. Se retiraron los proveedores debug/Play Integrity, la prueba y el script de registro asociados. Compañeros y docente pueden utilizar sus instalaciones con Firebase Authentication y los roles de la app, sin registrar tokens de depuración.
 
-Cada nuevo dispositivo o instalación de desarrollo debe registrar su secreto de App Check. Tras instalar y abrir la nueva APK debug, ejecutar desde la raíz, reemplazando el identificador por el que muestre `adb devices`:
-
-```powershell
-python scripts/register-appcheck-debug-token.py --serial emulator-5556 --name Mi-dispositivo-desarrollo
-```
-
-El script requiere Python, ADB y una sesión de Google Cloud CLI con permisos de App Check. Lee el secreto de los logs del proceso de la app y lo registra directamente; no muestra ni guarda su valor. El secreto queda en el almacenamiento privado de esa instalación. Reinstalar borrando datos o cambiar de dispositivo puede generar uno nuevo. También se puede registrar desde Firebase Console → Security → App Check → aplicación Android → Manage debug tokens.
-
-La exigencia de App Check se limita a estas funciones. No se habilitó la exigencia global para Authentication, Firestore ni Storage, para conservar el acceso de las APK anteriores.
-
-### Antes de distribuir release
-
-La variante release compila con Play Integrity. Aún debe registrarse la huella SHA-256 del certificado final de distribución y configurar/verificar Play Integrity para la forma de distribución elegida; si se usa Google Play, vincular el proyecto desde Play Console y utilizar el certificado de firma de Google Play. La prueba realizada corresponde al proveedor debug, no certifica una distribución release real. [Guía oficial](https://firebase.google.com/docs/app-check/android/play-integrity-provider).
+Authentication, Firestore y Storage tienen App Check en modo `UNENFORCED`; sus reglas y comprobaciones de autorización se mantienen. La cuota diaria de IA y el secreto del proveedor permanecen en el servidor.
 
 ## Trabajo funcional pendiente después de esta preparación
 
@@ -123,14 +108,15 @@ La búsqueda preparada utiliza el índice simple existente de `latitude`, distan
 - `functions/test/analysis.test.cjs`: validación de entradas, fechas, rutas privadas, roles y respuestas del modelo, IDs de duplicados y distancia. No evalúa la calidad real de Gemini.
 - `functions/test/emulator.integration.cjs`: acceso sin sesión, perfil activo/suspendido, organizador pendiente/verificado, participante y respuesta de IA sin configurar. Usa Auth/Firestore/Functions locales.
 - `ContentAnalysisPreparationTest.kt`: estado desactivado, ausencia de aprobaciones ficticias, rechazo con alternativa, validación anterior al proveedor y cancelación de coroutines.
-- `AppCheckConfigurationTest.kt`: prueba Android real optativa (`appCheckSmoke=true`) que comprueba la obtención de un token desde un dispositivo debug registrado, sin crear publicaciones ni cuentas.
 
 Se probaron directamente contra Gemini un texto permitido, un rechazo con alternativa, un duplicado redactado de otra manera, una edición en otra fecha y una imagen sintética relacionada/no relacionada con la categoría. Estos ejemplos no sustituyen una evaluación amplia de calidad. Los emuladores no certifican permisos IAM ni facturación de producción. El recorrido completo de publicar desde los formularios sigue pendiente.
 
 Verificación de esta preparación: compilación de APK y APK de pruebas correcta; 58 pruebas JVM sin fallos (cuatro nuevas), 12 pruebas unitarias de Functions y siete de integración local aprobadas. También se comprobó `aiStatus` en producción con sesión válida, sin sesión y con perfil suspendido; la cuenta y perfil temporales usados para esa comprobación se eliminaron. Registros locales: `build/cloud-functions-android-build.log`, `build/cloud-functions-unit-tests.log`, `build/cloud-functions-emulator-tests.log`, `build/cloud-functions-production-smoke.json` y `build/cloud-functions-artifact-policy.log`.
 
-Verificación al activar el proyecto gratuito: debug/APK de pruebas compilados y Kotlin de release compilado; las 58 pruebas JVM y las 19 pruebas locales del backend siguieron pasando. `AppCheckConfigurationTest` pasó en el emulador con App Check real. Se probaron nueve casos contra las funciones desplegadas: rechazo sin App Check, sin Auth, de participante al analizar eventos y de perfil suspendido; consulta protegida de estado; texto permitido; texto rechazado con alternativa; imagen privada relacionada y no relacionada. La cuenta, el perfil, la cuota y la imagen temporales de esta prueba se eliminaron. No se crearon publicaciones ni comentarios de prueba en producción.
+Historial de activación del proyecto gratuito: debug/APK de pruebas y Kotlin de release compilados; 58 pruebas JVM y 19 pruebas locales del backend aprobadas. Se verificaron los servicios de análisis y sus permisos en producción con fixtures temporales, posteriormente eliminadas. La comprobación de App Check de esa versión fue retirada al simplificar la entrega académica; no corresponde al estado actual.
 
 Registros de esta activación: `build/gemini-key-validation.json`, `build/gemini-provider-smoke.json`, `build/appcheck-android-build.log`, `build/appcheck-sdk-runtime-tests.log`, `build/gemini-free-emulator-tests.log`, `build/gemini-free-analysis-deploy.log` y `build/gemini-callable-smoke.json`. Los informes no contienen claves ni tokens.
+
+Verificación posterior al retiro de App Check: 58 pruebas JVM, 12 pruebas unitarias de Functions y siete pruebas de integración local aprobadas. Se compiló la APK debug, la APK de pruebas y Kotlin de release, y se redesplegaron las tres funciones. Nueve casos en producción, todos sin enviar token App Check, comprobaron acceso con sesión activa, análisis de texto/borrador, moderación con alternativa, rechazo sin sesión, permisos de participante/organizador pendiente, rechazo de cuenta suspendida y cuota diaria. Las fixtures temporales de Auth, perfil y cuota se eliminaron. Registros actuales: `build/disable-appcheck-android-build.log`, `build/disable-appcheck-functions-tests.log`, `build/disable-appcheck-deploy.log` y `build/disable-appcheck-production-smoke.json`.
 
 Referencias: [Functions](https://firebase.google.com/docs/functions/get-started), [funciones invocables](https://firebase.google.com/docs/functions/callable), [secretos](https://firebase.google.com/docs/functions/config-env#secret_parameters), [Gemini](https://ai.google.dev/gemini-api/docs/image-understanding).

@@ -68,8 +68,6 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.storage)
     implementation(libs.firebase.functions)
-    debugImplementation(libs.firebase.appcheck.debug)
-    releaseImplementation(libs.firebase.appcheck.playintegrity)
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)
     ksp(libs.hilt.compiler)

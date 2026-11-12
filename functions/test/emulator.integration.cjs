@@ -35,12 +35,13 @@ test('aiStatus rechaza acceso sin sesión', async () => {
   assert.equal(response.status, 401);
   assert.equal(response.body.error.status, 'UNAUTHENTICATED');
 });
-test('una cuenta activa puede consultar la preparación y la IA aparece desactivada', async () => {
+test('una cuenta activa puede consultar el estado sin App Check y la IA local aparece desactivada', async () => {
   const response = await call('aiStatus', await account());
   assert.equal(response.status, 200);
   assert.equal(response.body.result.enabled, false);
   assert.equal(response.body.result.modelConfigured, false);
   assert.equal(response.body.result.preparationOnly, true);
+  assert.equal(response.body.result.appCheckEnforced, false);
   assert.equal(response.body.result.contractVersion, 1);
 });
 test('aiStatus rechaza una cuenta suspendida', async () => {

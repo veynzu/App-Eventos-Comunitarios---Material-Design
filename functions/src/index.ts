@@ -16,7 +16,6 @@ const model = () => (process.env.GEMINI_MODEL ?? "").trim();
 // La preparación no declara un secreto obligatorio ni crea credenciales ficticias.
 // Al activar AI_ENABLED en el despliegue, las funciones de análisis lo vinculan a Secret Manager.
 const geminiKey = enabled() ? defineSecret("GEMINI_API_KEY") : null;
-const appCheck = process.env.AI_ENFORCE_APP_CHECK === "true";
 
 async function activeUid(request: CallableRequest, publishing = false): Promise<string> {
   if (!request.auth) throw new HttpsError("unauthenticated", "Inicia sesión para utilizar este servicio.");
@@ -52,14 +51,14 @@ async function analyze<T>(work: () => Promise<T>): Promise<T> {
 }
 
 /** Única función del despliegue inicial. No consulta Gemini ni necesita su clave. */
-export const aiStatus = onCall({ enforceAppCheck: appCheck }, async request => {
+export const aiStatus = onCall({ enforceAppCheck: false }, async request => {
   await activeUid(request);
   return { provider: "gemini", enabled: enabled(), modelConfigured: Boolean(model()),
-    appCheckEnforced: appCheck, preparationOnly: true, region: "us-central1", contractVersion: 1 };
+    appCheckEnforced: false, preparationOnly: true, region: "us-central1", contractVersion: 1 };
 });
 
 /** Prevalidaciones: no son autorizaciones de publicación y no guardan eventos ni comentarios. */
-export const analyzeText = onCall({ enforceAppCheck: appCheck, secrets: geminiKey ? [geminiKey] : [] }, request => analyze(async () => {
+export const analyzeText = onCall({ enforceAppCheck: false, secrets: geminiKey ? [geminiKey] : [] }, request => analyze(async () => {
   const uid = await activeUid(request);
   const input = parseTextInput(request.data);
   const client = provider();
@@ -99,7 +98,7 @@ async function imageFor(draft: EventDraft): Promise<{ bytes: Buffer; mimeType: s
   const [bytes] = await getStorage().bucket().file(draft.imagePath, { generation: metadata.generation }).download({ validation: "crc32c" });
   return { bytes, mimeType: metadata.contentType! };
 }
-export const analyzeEventDraft = onCall({ enforceAppCheck: appCheck, secrets: geminiKey ? [geminiKey] : [] }, request => analyze(async () => {
+export const analyzeEventDraft = onCall({ enforceAppCheck: false, secrets: geminiKey ? [geminiKey] : [] }, request => analyze(async () => {
   const uid = await activeUid(request, true);
   const draft = parseEventDraft(request.data, uid);
   const client = provider();
