@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 const project = 'demo-share-you-rules';
 const registrationDate = new Date();
@@ -37,6 +37,29 @@ function profile(user, changes = {}) {
 }
 
 async function request(path, user, method = 'GET', data, admin = false) {
+  // Este script prueba permisos sociales con respuestas de IA positivas explícitas SOLO locales.
+  // Las pruebas de ausencia/alteración/reutilización de comprobantes están en functions/test/publishing.integration.cjs.
+  if (!admin && user && method === 'PATCH' && data &&
+      ((path.startsWith('events/') && data.revision === 1) ||
+        (path.startsWith('comments/') && typeof data.text === 'string' && Number.isInteger(data.id)))) {
+    const id = randomUUID();
+    const isEvent = path.startsWith('events/');
+    data.aiReviewId = id;
+    if (isEvent) data.aiDuplicateConfirmed = false;
+    const review = isEvent ? { kind: 'event', uid: user.localId, title: data.title, description: data.description,
+      category: data.category, startsAt: data.startsAt, endsAt: data.endsAt, latitude: data.latitude, longitude: data.longitude,
+      photoUri: data.photoUri, sourceEventId: data.previousEventId, hasDuplicates: false, expiresAt: Date.now() + 900000
+    } : { kind: 'text', uid: user.localId, text: data.text, expiresAt: Date.now() + 900000 };
+    const fixture = await request(`aiReviews/${id}`, null, 'PATCH', review, true);
+    assert.equal(fixture.status, 200, await fixture.text());
+    const fields = x => Object.fromEntries(Object.entries(x).map(([k, v]) => [k, value(v)]));
+    return fetch(`${root}:commit`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.idToken}` },
+      body: JSON.stringify({ writes: [
+        { update: { name: `projects/${project}/databases/(default)/documents/${path}`, fields: fields(data) } },
+        { update: { name: `projects/${project}/databases/(default)/documents/aiReviewUses/${id}`,
+          fields: fields({ uid: user.localId, kind: isEvent ? 'event' : 'text', targetId: data.id }) } }
+      ] }) });
+  }
   const response = await fetch(`${root}/${path}`, {
     method,
     headers: {

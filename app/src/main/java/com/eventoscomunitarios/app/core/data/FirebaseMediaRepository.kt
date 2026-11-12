@@ -28,7 +28,7 @@ class FirebaseMediaRepository @Inject constructor(
 ) : MediaRepository {
     override suspend fun uploadImage(userId: String, localUri: String, folder: String): String {
         require(auth.currentUser?.uid == userId) { "Inicia sesión para subir una imagen." }
-        require(folder in setOf("events", "profiles", "identities")) { "Destino de imagen inválido." }
+        require(folder in setOf("events", "profiles", "identities", "event-drafts")) { "Destino de imagen inválido." }
         val uri = Uri.parse(localUri)
         require(uri.scheme == "content") { "Selecciona una imagen desde el dispositivo." }
         val (bytes, mimeType) = withContext(Dispatchers.IO) {
@@ -54,13 +54,17 @@ class FirebaseMediaRepository @Inject constructor(
             data to bounds.outMimeType
         }
         val reference = storage.reference.child("$folder/$userId/${UUID.randomUUID()}")
+        if (folder == "event-drafts") require(mimeType in setOf("image/jpeg", "image/png", "image/webp")) {
+            "Selecciona una imagen JPEG, PNG o WebP de hasta 10 MB."
+        }
         val metadata = StorageMetadata.Builder().setContentType(mimeType)
             .setCustomMetadata("ownerId", userId).build()
         val upload = reference.putBytes(bytes, metadata)
         try {
             upload.await()
             // Los documentos de identidad se leen con el SDK autenticado, sin publicar downloadUrl.
-            return if (folder == "identities") "gs://${reference.bucket}/${reference.path.trimStart('/')}"
+            return if (folder == "event-drafts") reference.path.trimStart('/')
+            else if (folder == "identities") "gs://${reference.bucket}/${reference.path.trimStart('/')}"
             else reference.downloadUrl.await().toString()
         } catch (error: Exception) {
             upload.cancel()
@@ -75,15 +79,42 @@ class FirebaseMediaRepository @Inject constructor(
 
     override suspend fun deleteImage(url: String) {
         if (url.isBlank()) return
-        val reference = storage.imageReference(url)
+        val reference = if (url.startsWith("event-drafts/")) storage.reference.child(url) else storage.imageReference(url)
         require(reference.bucket == storage.reference.bucket &&
-            (reference.path.startsWith("/events/") || reference.path.startsWith("/profiles/") || reference.path.startsWith("/identities/"))) {
+            reference.path.trimStart('/').substringBefore('/') in setOf("events", "profiles", "identities", "event-drafts", "validated-events")) {
             "La imagen no pertenece al almacenamiento de la aplicación."
         }
         try {
             reference.delete().await()
         } catch (error: StorageException) {
             if (error.errorCode != StorageException.ERROR_OBJECT_NOT_FOUND) throw error
+        }
+    }
+
+    override suspend fun uploadAnalysisImage(userId: String, uri: String): String {
+        require(auth.currentUser?.uid == userId) { "Inicia sesión para subir una imagen." }
+        if (uri.startsWith("content://")) return uploadImage(userId, uri, "event-drafts")
+        val source = storage.imageReference(uri)
+        require(source.bucket == storage.reference.bucket &&
+            source.path.trimStart('/').substringBefore('/') in setOf("events", "validated-events")) {
+            "La imagen no pertenece a un evento de la aplicación. Selecciona otra imagen."
+        }
+        val bytes = source.getBytes(MAX_IMAGE_BYTES.toLong()).await()
+        val mimeType = withContext(Dispatchers.IO) {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            require(bounds.outWidth > 0 && bounds.outHeight > 0 && bounds.outMimeType in setOf("image/jpeg", "image/png", "image/webp")) {
+                "Selecciona una imagen JPEG, PNG o WebP de hasta 10 MB."
+            }
+            bounds.outMimeType
+        }
+        val target = storage.reference.child("event-drafts/$userId/${UUID.randomUUID()}")
+        val upload = target.putBytes(bytes, StorageMetadata.Builder().setContentType(mimeType).setCustomMetadata("ownerId", userId).build())
+        try { upload.await(); return target.path.trimStart('/') }
+        catch (error: Exception) {
+            upload.cancel()
+            withContext(NonCancellable) { runCatching { withTimeout(5_000) { target.delete().await() } } }
+            throw error
         }
     }
 

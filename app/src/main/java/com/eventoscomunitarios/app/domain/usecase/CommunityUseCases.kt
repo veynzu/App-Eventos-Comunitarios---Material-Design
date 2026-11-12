@@ -21,13 +21,13 @@ class CommunityUseCases @Inject constructor(
     val following = communityRepository.following
     val syncState = communityRepository.syncState
 
-    suspend fun addComment(userId: String, eventId: Int, text: String): Result<EventComment> = firebaseResult {
+    suspend fun addComment(userId: String, eventId: Int, text: String, reviewId: String? = null, isContribution: Boolean = false): Result<EventComment> = firebaseResult {
         val user = requireActiveUser(userId)
         val event = requirePublishedEvent(eventId)
-        require(canComment(userId, eventId)) { "Solo puedes comentar después de participar con inscripción confirmada y de finalizar el evento" }
+        require(if (isContribution) canContribute(userId, eventId) else canComment(userId, eventId)) { "Solo puedes comentar después de participar con inscripción confirmada y de finalizar el evento" }
         require(text.isNotBlank()) { "Escribe un comentario" }
         require(text.trim().length <= 1000) { "El comentario no puede superar 1000 caracteres" }
-        val comment = EventComment(communityRepository.nextCommentId(), eventId, userId, user.name, text.trim(), System.currentTimeMillis())
+        val comment = EventComment(communityRepository.nextCommentId(), eventId, userId, user.name, text.trim(), System.currentTimeMillis(), isContribution, reviewId)
         communityRepository.saveComment(comment)
         // El comentario ya está guardado: un fallo del aviso no debe provocar que se publique de nuevo.
         if (event.organizerId != userId) notifySafely(event.organizerId, "Nuevo comentario", "${user.name} comentó en ${event.title}.", eventId)
@@ -63,6 +63,12 @@ class CommunityUseCases @Inject constructor(
             eventRepository.registrations.value.any {
                 it.userId == userId && it.eventId == eventId && it.status == EventRegistrationStatus.CONFIRMED
             }
+    }
+
+    fun canContribute(userId: String, eventId: Int): Boolean {
+        val event = eventRepository.events.value.firstOrNull { it.id == eventId } ?: return false
+        return userRepository.users.value.any { it.id == userId && it.accountStatus == AccountStatus.ACTIVE } &&
+            !event.isDeleted && event.moderationStatus == EventModerationStatus.APPROVED && !event.hasEnded
     }
 
     suspend fun toggleFollow(userId: String, organizerId: String): Result<Unit> = firebaseResult {

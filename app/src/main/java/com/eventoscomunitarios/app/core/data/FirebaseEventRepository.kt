@@ -101,6 +101,8 @@ class FirebaseEventRepository @Inject constructor(
             val current = event.copy(organizerId = actor.id, organizerName = profile.getString("name") ?: actor.name,
                 submittedByName = profile.getString("name") ?: actor.name, attendeeCount = 0, revision = 1)
             transaction.set(reference, EventRecord(current, emptyList()).toDocument())
+            current.aiReviewId?.let { transaction.set(firestore.collection("aiReviewUses").document(it),
+                mapOf("uid" to actor.id, "kind" to "event", "targetId" to current.id)) }
             current
         }.await()
         if (auth.currentUser?.uid == actor.id) updateCache(EventRecord(created, emptyList()))
@@ -146,6 +148,9 @@ class FirebaseEventRepository @Inject constructor(
                 val promoted = after.registrations.filter { entry -> entry.status == EventRegistrationStatus.CONFIRMED &&
                     before.registrations.any { it.userId == entry.userId && it.status == EventRegistrationStatus.WAITLIST } }
                 transaction.set(reference, after.toDocument() + mapOf("lastActorId" to actor.id, "promotedUserId" to promoted.singleOrNull()?.userId))
+                if (after.event.aiReviewId != before.event.aiReviewId) after.event.aiReviewId?.let {
+                    transaction.set(firestore.collection("aiReviewUses").document(it), mapOf("uid" to actor.id, "kind" to "event", "targetId" to eventId))
+                }
             }
             EventChange(before, after)
         }.await()
@@ -242,6 +247,7 @@ private fun DocumentSnapshot.toEventRecord(): EventRecord? {
         isFinished = getBoolean("isFinished") ?: false, rejectionReason = getString("rejectionReason"), isDeleted = getBoolean("isDeleted") ?: false, revision = getLong("revision") ?: 0,
         locationConfirmed = getBoolean("locationConfirmed") ?: false,
         isOutdoor = getBoolean("isOutdoor") ?: false,
+        aiReviewId = getString("aiReviewId"), aiDuplicateConfirmed = getBoolean("aiDuplicateConfirmed") ?: false,
         seriesId = getLong("seriesId")?.toInt() ?: eventId, previousEventId = getLong("previousEventId")?.toInt()
     )
     return EventRecord(event, entries)
@@ -262,5 +268,5 @@ private fun EventRecord.toDocument(): Map<String, Any?> = with(event) {
         "rejectionReason" to rejectionReason, "isDeleted" to isDeleted, "revision" to revision,
         "registrationUserIds" to registrations.map { it.userId },
         "registrations" to registrations.associate { it.userId to mapOf("status" to it.status.name, "registeredAt" to it.registeredAt, "queueOrder" to it.queueOrder) }
-    )
+    ) + if (aiReviewId != null) mapOf("aiReviewId" to aiReviewId, "aiDuplicateConfirmed" to aiDuplicateConfirmed) else emptyMap()
 }

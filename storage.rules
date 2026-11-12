@@ -38,6 +38,20 @@ service firebase.storage {
       allow delete: if validFolder(folder) && ownsFolder(uid);
     }
 
+    match /event-drafts/{uid}/{fileName} {
+      allow get, delete: if ownsFolder(uid);
+      allow create: if ownsFolder(uid) && resource == null
+        && request.resource.size > 0 && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp']
+        && request.resource.metadata.ownerId == uid;
+    }
+
+    match /validated-events/{uid}/{fileName} {
+      allow get: if signedIn();
+      // Solo Functions crea esta copia de los bytes analizados. Un cliente no puede reemplazarla.
+      allow delete: if ownsFolder(uid) || isModerator();
+    }
+
     // Listados, sobrescrituras y otras rutas quedan denegados por defecto.
   }
 }

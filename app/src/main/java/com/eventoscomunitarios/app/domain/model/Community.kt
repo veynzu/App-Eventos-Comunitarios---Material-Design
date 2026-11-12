@@ -6,7 +6,9 @@ data class EventComment(
     val userId: String,
     val authorName: String,
     val text: String,
-    val createdAt: Long
+    val createdAt: Long,
+    val isContribution: Boolean = false,
+    val aiReviewId: String? = null
 )
 
 data class EventVote(val eventId: Int, val userId: String, val value: Int)

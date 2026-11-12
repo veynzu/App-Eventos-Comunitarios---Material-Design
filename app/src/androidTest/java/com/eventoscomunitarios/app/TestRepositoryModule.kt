@@ -20,7 +20,7 @@ import javax.inject.Singleton
 @Module
 @TestInstallIn(components = [SingletonComponent::class], replaces = [RepositoryModule::class])
 object TestRepositoryModule {
-    @Provides @Singleton fun contentAnalysis(): ContentAnalysisRepository = InMemoryContentAnalysisRepository()
+    @Provides @Singleton fun contentAnalysis(): ContentAnalysisRepository = TestDependencies().analysisRepository
 
     @Provides @Singleton fun events(): EventRepository = InMemoryEventRepository()
     @Provides @Singleton fun users(): UserRepository = InMemoryUserRepository()

@@ -82,7 +82,7 @@ export function parseTextAssessment(value: unknown): TextAssessment {
   const input = record(value);
   if (typeof input.allowed !== "boolean" || !Array.isArray(input.reasons) || input.reasons.length > 10 ||
       input.reasons.some(x => typeof x !== "string" || x.length > 1000)) throw new Error("Respuesta de moderación inválida");
-  if (input.suggestedText !== null && (typeof input.suggestedText !== "string" || !input.suggestedText.trim() || input.suggestedText.length > 6000)) throw new Error("Sugerencia inválida");
+  if (input.suggestedText !== null && (typeof input.suggestedText !== "string" || !input.suggestedText.trim() || input.suggestedText.length > 1000)) throw new Error("Sugerencia inválida");
   if (!input.allowed && (input.reasons.length === 0 || input.suggestedText === null)) throw new Error("Falta motivo o alternativa");
   return { allowed: input.allowed, reasons: input.reasons as string[], suggestedText: input.suggestedText as string | null };
 }
@@ -106,7 +106,7 @@ export const textSchema = {
   type: "object", additionalProperties: false, required: ["allowed", "reasons", "suggestedText"],
   properties: {
     allowed: { type: "boolean" }, reasons: { type: "array", items: { type: "string" } },
-    suggestedText: { type: ["string", "null"] },
+    suggestedText: { type: ["string", "null"], maxLength: 1000 },
   },
 };
 export const eventSchema = {
@@ -128,4 +128,5 @@ Evalúa insultos dirigidos, acoso, amenazas, discriminación y contenido sexual 
 Considera el contexto: una mención educativa o una cita informativa no es una agresión.
 Si no permites el texto, explica el motivo y propón una alternativa respetuosa que preserve la intención legítima.
 Si la intención es dañina, sugiere una invitación a dialogar respetuosamente sin reproducir amenazas ni odio.
+La alternativa debe tener como máximo 1000 caracteres para poder reutilizarse en los formularios.
 No publiques, no ejecutes acciones, no inventes eventos, y devuelve únicamente el JSON solicitado.`;

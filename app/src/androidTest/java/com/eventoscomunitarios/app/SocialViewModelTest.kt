@@ -134,7 +134,7 @@ class SocialViewModelTest {
         assertTrue(notices.uiState.value.items.first { it.notification.id == item.notification.id }.notification.isRead)
     }
 
-    private fun detail(userId: String, eventId: Int = 1) = tracked(EventDetailViewModel(handle(userId, eventId), data.events, data.users, data.community))
+    private fun detail(userId: String, eventId: Int = 1) = tracked(EventDetailViewModel(handle(userId, eventId), data.events, data.users, data.community, data.analysis))
     private suspend fun finishedParticipation(userId: String, eventId: Int) {
         if (data.events.registrations.value.none { it.userId == userId && it.eventId == eventId }) data.events.register(userId, eventId).getOrThrow()
         data.eventRepository.save(data.events.findEvent(eventId)!!.copy(startsAt = System.currentTimeMillis() - 7200000,

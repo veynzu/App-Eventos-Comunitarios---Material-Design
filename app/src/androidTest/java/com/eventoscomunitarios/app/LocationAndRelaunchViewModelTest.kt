@@ -100,7 +100,7 @@ class LocationAndRelaunchViewModelTest {
     @Test fun relaunchFormCopiesThePlaceAndScheduleButRequiresNewDates() = runBlocking {
         val old = data.events.findEvent(1)!!.copy(startsAt = System.currentTimeMillis() - 7200000, endsAt = System.currentTimeMillis() - 1000, isFinished = true)
         data.eventRepository.save(old)
-        val form = track(CreateEventViewModel(SavedStateHandle(mapOf("userId" to "organizer-carlos", "sourceEventId" to old.id)), data.events, data.users))
+        val form = track(CreateEventViewModel(SavedStateHandle(mapOf("userId" to "organizer-carlos", "sourceEventId" to old.id)), data.events, data.users, data.analysis))
         await { form.uiState.value.sourceReady }
         assertEquals(old.title, form.uiState.value.title)
         assertEquals(old.coordinates, form.uiState.value.coordinates)

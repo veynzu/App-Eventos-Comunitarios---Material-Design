@@ -40,7 +40,7 @@ test('una cuenta activa puede consultar el estado sin App Check y la IA local ap
   assert.equal(response.status, 200);
   assert.equal(response.body.result.enabled, false);
   assert.equal(response.body.result.modelConfigured, false);
-  assert.equal(response.body.result.preparationOnly, true);
+  assert.equal(response.body.result.preparationOnly, false);
   assert.equal(response.body.result.appCheckEnforced, false);
   assert.equal(response.body.result.contractVersion, 1);
 });

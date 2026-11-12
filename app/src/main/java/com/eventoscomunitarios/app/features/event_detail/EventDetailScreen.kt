@@ -236,7 +236,8 @@ fun EventDetailScreen(
                                 }
                             }
                             Text(stringResource(R.string.ui_comments_count, state.comments.size), style = MaterialTheme.typography.titleMedium)
-                            if (state.canComment) {
+                            if (state.canComment || state.canContribute) {
+                                if (state.canContribute) Text(stringResource(R.string.ai_contribution_help))
                                 OutlinedTextField(
                                     value = state.commentText, onValueChange = viewModel::onCommentChange,
                                     enabled = !state.isSaving,
@@ -245,13 +246,14 @@ fun EventDetailScreen(
                                     isError = state.commentError != null,
                                     supportingText = { Text(localizedMessage(state.commentError ?: "${state.commentText.length}/1000")) }
                                 )
-                                Button(onClick = viewModel::addComment, modifier = Modifier.align(Alignment.End), enabled = state.commentText.isNotBlank() && !state.isSaving) {
-                                    Text(stringResource(R.string.ui_publish_comment))
+                                com.eventoscomunitarios.app.core.components.TextAnalysisFeedback(state.textAssessment, viewModel::useSuggestedComment)
+                                Button(onClick = { viewModel.addComment(if (locale.language == "en") "en" else "es") }, modifier = Modifier.align(Alignment.End), enabled = state.commentText.isNotBlank() && !state.isSaving) {
+                                    Text(stringResource(if (state.isAnalyzingComment) R.string.ai_analyzing_text else if (state.canContribute) R.string.ai_contribution_publish else R.string.ui_publish_comment))
                                 }
                             } else {
                                 Text(stringResource(R.string.ui_comments_pending), color = TextoSecundario)
                             }
-                            if (!state.canComment) Text(stringResource(R.string.comments_participants_only), style = MaterialTheme.typography.bodySmall)
+                            if (!state.canComment && !state.canContribute) Text(stringResource(R.string.comments_participants_only), style = MaterialTheme.typography.bodySmall)
                             if (state.comments.isEmpty()) Text(stringResource(R.string.ui_no_comments), color = TextoSecundario)
                         }
                     }
@@ -261,6 +263,7 @@ fun EventDetailScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
                                         Text(comment.authorName, fontWeight = FontWeight.SemiBold)
+                                        if (comment.isContribution) Text(stringResource(R.string.ai_contribution), style = MaterialTheme.typography.labelSmall)
                                         Text(formatDateTime(comment.createdAt, locale), style = MaterialTheme.typography.bodySmall)
                                     }
                                     if (comment.userId == state.currentUserId || state.isModerator) {

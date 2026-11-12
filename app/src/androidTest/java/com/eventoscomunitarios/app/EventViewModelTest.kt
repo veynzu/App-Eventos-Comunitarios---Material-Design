@@ -63,9 +63,9 @@ class EventViewModelTest {
     }
 
     @Test fun editingRequiresOwnershipAndReturnsToModeration() = runBlocking {
-        val denied = EditEventViewModel(handle("participant-ana"), data.events, data.users)
+        val denied = EditEventViewModel(handle("participant-ana"), data.events, data.users, data.analysis)
         assertTrue(denied.uiState.value.loadResult is RequestResult.Failure)
-        val owner = EditEventViewModel(handle("organizer-carlos"), data.events, data.users)
+        val owner = EditEventViewModel(handle("organizer-carlos"), data.events, data.users, data.analysis)
         owner.onTitleChange("Título actualizado")
         owner.saveChanges()
         await { owner.uiState.value.saveResult != RequestResult.Loading }
@@ -84,7 +84,7 @@ class EventViewModelTest {
     }
 
     @Test fun repeatedAttendanceNeverDuplicatesRegistration() = runBlocking {
-        val detail = EventDetailViewModel(handle("participant-ana"), data.events, data.users, data.community)
+        val detail = EventDetailViewModel(handle("participant-ana"), data.events, data.users, data.community, data.analysis)
         val before = data.events.registrations.value.size
         detail.confirmAttendance()
         await { !detail.uiState.value.isSaving }
@@ -93,9 +93,9 @@ class EventViewModelTest {
     }
 
     @Test fun cancellationPromotesWaitingParticipantAndCreatesNotification() = runBlocking {
-        val waiting = EventDetailViewModel(handle("participant-ana", 3), data.events, data.users, data.community)
+        val waiting = EventDetailViewModel(handle("participant-ana", 3), data.events, data.users, data.community, data.analysis)
         assertEquals(EventRegistrationStatus.WAITLIST, waiting.uiState.value.registrationStatus)
-        val confirmed = EventDetailViewModel(handle("participant-laura", 3), data.events, data.users, data.community)
+        val confirmed = EventDetailViewModel(handle("participant-laura", 3), data.events, data.users, data.community, data.analysis)
         confirmed.cancelAttendance()
         await { !confirmed.uiState.value.isSaving }
         assertEquals(EventRegistrationStatus.CONFIRMED,
@@ -139,7 +139,7 @@ class EventViewModelTest {
     private fun validForm(user: String, cases: EventUseCases = data.events): CreateEventViewModel {
         val start = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L
         val end = start + 2 * 60 * 60 * 1000L
-        return CreateEventViewModel(handle(user), cases, data.users).apply {
+        return CreateEventViewModel(handle(user), cases, data.users, data.analysis).apply {
             onTitleChange("Encuentro comunitario")
             onCategoryChange("Comunidad")
             onDateChange(eventFormDate(start)); onTimeChange(eventFormTime(start))

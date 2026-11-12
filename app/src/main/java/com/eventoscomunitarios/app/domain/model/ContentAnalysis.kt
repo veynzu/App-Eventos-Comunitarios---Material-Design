@@ -13,7 +13,8 @@ data class AiPreparationStatus(
 data class TextAssessment(
     val allowed: Boolean,
     val reasons: List<String>,
-    val suggestedText: String?
+    val suggestedText: String?,
+    val reviewId: String? = null
 )
 
 data class EventAnalysisRequest(
@@ -35,5 +36,7 @@ data class EventAssessment(
     val image: ImageAssessment,
     val possibleDuplicates: List<PossibleDuplicate>,
     val candidates: List<DuplicateCandidate>,
-    val candidatesTruncated: Boolean
+    val candidatesTruncated: Boolean,
+    val reviewId: String? = null,
+    val approvedPhotoUri: String? = null
 )

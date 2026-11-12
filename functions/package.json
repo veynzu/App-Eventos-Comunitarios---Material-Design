@@ -11,7 +11,7 @@
     "build": "tsc",
     "test": "node --test test/*.test.cjs",
     "check": "npm run build && npm test",
-    "test:integration": "node --test test/emulator.integration.cjs"
+    "test:integration": "node --test test/*.integration.cjs"
   },
   "dependencies": {
     "@google/genai": "3.2.0",

@@ -107,8 +107,8 @@ class FirebaseCommunityRepository @Inject constructor(
             requireActive(actor)
             require(event.exists() && event.getBoolean("isDeleted") != true) { "La publicación ya no está disponible" }
             val attendance = (event.get("registrations") as? Map<*, *>)?.get(uid) as? Map<*, *>
-            require((event.getBoolean("isFinished") == true || (event.getLong("endsAt") ?: Long.MAX_VALUE) <= System.currentTimeMillis()) &&
-                attendance?.get("status") == EventRegistrationStatus.CONFIRMED.name) {
+            val ended = event.getBoolean("isFinished") == true || (event.getLong("endsAt") ?: Long.MAX_VALUE) <= System.currentTimeMillis()
+            require(if (comment.isContribution) !ended else ended && attendance?.get("status") == EventRegistrationStatus.CONFIRMED.name) {
                 "Solo puedes comentar después de participar con inscripción confirmada y de finalizar el evento"
             }
             if (!existing.exists()) require(event.getString("moderationStatus") == EventModerationStatus.APPROVED.name) { "La publicación todavía no está aprobada" }
@@ -116,8 +116,11 @@ class FirebaseCommunityRepository @Inject constructor(
             require(comment.text.isNotBlank() && comment.text.trim().length <= 1000) { "El comentario debe tener entre 1 y 1000 caracteres" }
             transaction.set(reference, mapOf(
                 "id" to comment.id, "eventId" to comment.eventId, "userId" to uid,
-                "authorName" to (actor.getString("name") ?: comment.authorName), "text" to comment.text.trim(), "createdAt" to comment.createdAt
+                "authorName" to (actor.getString("name") ?: comment.authorName), "text" to comment.text.trim(), "createdAt" to comment.createdAt,
+                "isContribution" to comment.isContribution, "aiReviewId" to comment.aiReviewId
             ))
+            comment.aiReviewId?.let { transaction.set(firestore.collection("aiReviewUses").document(it),
+                mapOf("uid" to uid, "kind" to "text", "targetId" to comment.id)) }
         }.await()
     }
 
@@ -308,7 +311,8 @@ class FirebaseCommunityRepository @Inject constructor(
     private fun readComment(document: DocumentSnapshot): EventComment? {
         val id = document.int("id") ?: document.id.toIntOrNull() ?: return null
         return EventComment(id, document.int("eventId") ?: return null, document.getString("userId") ?: return null,
-            document.getString("authorName").orEmpty(), document.getString("text").orEmpty(), document.timestamp("createdAt"))
+            document.getString("authorName").orEmpty(), document.getString("text").orEmpty(), document.timestamp("createdAt"),
+            document.getBoolean("isContribution") ?: false, document.getString("aiReviewId"))
     }
     private fun readVote(document: DocumentSnapshot): EventVote? {
         return EventVote(document.int("eventId") ?: return null, document.getString("userId") ?: return null,

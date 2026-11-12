@@ -1,4 +1,4 @@
-param([ValidateSet('Preparation', 'Analysis')][string]$Stage = 'Preparation')
+param([ValidateSet('Preparation', 'Analysis')][string]$Stage = 'Analysis')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $filter = 'functions:share-you-ai:aiStatus'
@@ -11,7 +11,8 @@ if ($Stage -eq 'Analysis') {
     if (-not ($settings -match '^AI_ENABLED=true$') -or -not ($settings -match '^GEMINI_MODEL=\S+$')) {
         throw 'Falta activar AI_ENABLED y seleccionar GEMINI_MODEL. La clave se registra por separado en Secret Manager.'
     }
-    $filter = 'functions:share-you-ai'
+    # Publicar funciones y las reglas del flujo validado como una misma versión.
+    $filter = 'functions:share-you-ai,firestore:rules,storage'
 }
 Push-Location $projectRoot
 try {

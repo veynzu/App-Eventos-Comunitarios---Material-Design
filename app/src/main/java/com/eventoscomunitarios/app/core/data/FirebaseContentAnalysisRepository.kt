@@ -43,7 +43,9 @@ class FirebaseContentAnalysisRepository @Inject constructor(
             candidates = response.list("candidates").map { item -> item.objectValue().let {
                 DuplicateCandidate(it.number("eventId").toInt(), it.string("title"), it.number("startsAt").toLong(), it.number("distanceKm").toDouble())
             } },
-            candidatesTruncated = response.boolean("candidatesTruncated")
+            candidatesTruncated = response.boolean("candidatesTruncated"),
+            reviewId = response["reviewId"] as? String,
+            approvedPhotoUri = response["approvedPhotoUri"] as? String
         )
     }
 }
@@ -60,5 +62,5 @@ private fun Map<*, *>.textAssessment(): TextAssessment {
     require(containsKey("suggestedText") && (this["suggestedText"] == null || this["suggestedText"] is String)) { INVALID_RESPONSE }
     val suggestion = this["suggestedText"] as String?
     require(allowed || (reasons.isNotEmpty() && !suggestion.isNullOrBlank())) { INVALID_RESPONSE }
-    return TextAssessment(allowed, reasons, suggestion)
+    return TextAssessment(allowed, reasons, suggestion, this["reviewId"] as? String)
 }

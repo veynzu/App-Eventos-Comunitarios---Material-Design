@@ -50,9 +50,12 @@ import com.eventoscomunitarios.app.core.components.EventOutdoorField
 fun EditEventScreen(
     onCloseClick: () -> Unit,
     onChangesSaved: () -> Unit,
-    viewModel: EditEventViewModel = hiltViewModel()
+    viewModel: EditEventViewModel = hiltViewModel(),
+    onOpenSimilarEvent: (Int) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
+    val language = androidx.compose.ui.platform.LocalConfiguration.current.locales[0].language.let { if (it == "en") "en" else "es" }
+    androidx.activity.compose.BackHandler(enabled = state.saveResult == RequestResult.Loading) { }
     when (val result = state.loadResult) {
         RequestResult.Loading -> return LoadingIndicator()
         is RequestResult.Failure -> {
@@ -66,7 +69,7 @@ fun EditEventScreen(
     }
     Column(Modifier.fillMaxSize()) {
         TopAppBar(title = { Text(stringResource(R.string.ui_edit_event)) }, navigationIcon = {
-            IconButton(onClick = onCloseClick) { Icon(Icons.Default.Close, stringResource(R.string.ui_close)) }
+            IconButton(onClick = onCloseClick, enabled = state.saveResult != RequestResult.Loading) { Icon(Icons.Default.Close, stringResource(R.string.ui_close)) }
         })
         Box(Modifier.weight(1f).fillMaxWidth()) {
             Column(
@@ -99,19 +102,24 @@ fun EditEventScreen(
                 }
                 Text(stringResource(R.string.ui_waitlist_help),
                     style = MaterialTheme.typography.bodySmall)
+                com.eventoscomunitarios.app.core.components.EventAnalysisFeedback(state.assessment, viewModel::useSuggestedDescription)
                 (state.saveResult as? RequestResult.Failure)?.let {
                     Text(localizedMessage(it.message), color = MaterialTheme.colorScheme.error)
                 }
             }
         }
         Button(
-            onClick = viewModel::saveChanges,
+            onClick = { viewModel.saveChanges(language) },
             enabled = state.saveResult != RequestResult.Loading && state.saveResult != RequestResult.Success,
             modifier = Modifier.fillMaxWidth().padding(16.dp).imePadding()
-        ) { Text(stringResource(R.string.ui_save_for_review)) }
+        ) { Text(stringResource(if (state.isAnalyzing) R.string.ai_analyzing else R.string.ui_save_for_review)) }
     }
     if (state.showLocationPicker) LocationPickerDialog(state.coordinates, state.address, viewModel::closeLocationPicker, viewModel::onLocationSelected)
     if (state.saveResult == RequestResult.Loading) LoadingIndicator()
+    if (state.showDuplicateDialog) state.assessment?.let { review ->
+        com.eventoscomunitarios.app.core.components.DuplicateEventsDialog(review, onOpenSimilarEvent,
+            viewModel::confirmDifferentEvent, viewModel::dismissDuplicates)
+    }
     if (state.saveResult == RequestResult.Success) {
         AlertDialog(
             onDismissRequest = {},

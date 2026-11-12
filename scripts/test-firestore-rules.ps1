@@ -18,6 +18,7 @@ $taskConfig = @{
 if ($env:JAVA_HOME) { $env:PATH = "$env:JAVA_HOME/bin;$env:PATH" }
 Push-Location $taskTestDirectory
 try {
-    & firebase emulators:exec --project demo-share-you-rules --only 'auth,firestore' --config firebase.json 'node test-firestore-rules.mjs'
+    $ErrorActionPreference = 'Continue'
+    & firebase.cmd emulators:exec --project demo-share-you-rules --only 'auth,firestore' --config firebase.json 'node test-firestore-rules.mjs' 2>&1 | ForEach-Object { "$_" }
     if ($LASTEXITCODE -ne 0) { throw 'Fallaron las pruebas de reglas de Firestore.' }
 } finally { Pop-Location }

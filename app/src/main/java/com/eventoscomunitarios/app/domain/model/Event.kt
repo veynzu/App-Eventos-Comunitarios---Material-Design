@@ -32,7 +32,9 @@ data class Event(
     val locationConfirmed: Boolean = false,
     val seriesId: Int = id,
     val previousEventId: Int? = null,
-    val isOutdoor: Boolean = false
+    val isOutdoor: Boolean = false,
+    val aiReviewId: String? = null,
+    val aiDuplicateConfirmed: Boolean = false
 ) {
     val coordinates: Coordinates? get() = Coordinates(latitude, longitude).takeIf { locationConfirmed && it.isValid }
     val hasEnded: Boolean get() = isFinished || endsAt <= System.currentTimeMillis()

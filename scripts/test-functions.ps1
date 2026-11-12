@@ -11,7 +11,7 @@ Push-Location $projectRoot
 try {
     Invoke-CheckedNative 'npm.cmd' @('--prefix', 'functions', 'run', 'check')
     if (-not $UnitOnly) {
-        foreach ($port in @(5001, 9099, 8080)) {
+        foreach ($port in @(5001, 9099, 8080, 9199)) {
             if (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue) {
                 throw "El puerto $port está ocupado. Cierra el entorno de pruebas anterior antes de iniciar otro."
             }
@@ -29,7 +29,7 @@ try {
         $env:GCLOUD_PROJECT = 'demo-share-you-ai'
         if ($env:JAVA_HOME) { $env:PATH = "$env:JAVA_HOME/bin;$env:PATH" }
         try {
-            Invoke-CheckedNative 'firebase.cmd' @('emulators:exec', '--project', 'demo-share-you-ai', '--config', 'firebase.json', '--only', 'functions,auth,firestore', 'npm --prefix functions run test:integration')
+            Invoke-CheckedNative 'firebase.cmd' @('emulators:exec', '--project', 'demo-share-you-ai', '--config', 'firebase.json', '--only', 'functions,auth,firestore,storage', 'npm --prefix functions run test:integration')
         } finally {
             $env:AI_ENABLED = $previousAiEnabled
             $env:GEMINI_MODEL = $previousModel

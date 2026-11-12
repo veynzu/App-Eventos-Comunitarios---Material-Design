@@ -14,6 +14,8 @@ import com.eventoscomunitarios.app.domain.model.EventModerationStatus
 import com.eventoscomunitarios.app.domain.model.Coordinates
 import com.eventoscomunitarios.app.domain.usecase.EventUseCases
 import com.eventoscomunitarios.app.domain.usecase.UserUseCases
+import com.eventoscomunitarios.app.domain.usecase.ContentAnalysisUseCases
+import com.eventoscomunitarios.app.domain.model.EventAssessment
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,7 +54,11 @@ data class EditEventUiState(
     val eventId: Int? = null,
     val loadResult: RequestResult = RequestResult.Loading,
     val rejectionReason: String? = null,
-    val saveResult: RequestResult? = null
+    val saveResult: RequestResult? = null,
+    val isAnalyzing: Boolean = false,
+    val assessment: EventAssessment? = null,
+    val reviewedEvent: Event? = null,
+    val showDuplicateDialog: Boolean = false
 ) {
     val isFormValid: Boolean
         get() = title.isNotBlank() && category.isNotBlank() && date.isNotBlank() &&
@@ -66,7 +72,8 @@ data class EditEventUiState(
 class EditEventViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val events: EventUseCases,
-    private val users: UserUseCases
+    private val users: UserUseCases,
+    private val analysis: ContentAnalysisUseCases
 ) : ViewModel() {
     private val userId: String = savedStateHandle["userId"] ?: ""
     private val eventId: Int? = savedStateHandle["eventId"]
@@ -102,8 +109,11 @@ class EditEventViewModel @Inject constructor(
     }
     fun onOutdoorChange(value: Boolean) = editForm { copy(isOutdoor = value, saveResult = null) }
 
-    fun saveChanges() {
+    fun saveChanges(language: String = "es") {
         if (_uiState.value.saveResult == RequestResult.Loading || _uiState.value.saveResult == RequestResult.Success) return
+        if (_uiState.value.reviewedEvent != null && _uiState.value.assessment?.possibleDuplicates?.isNotEmpty() == true) {
+            update { copy(showDuplicateDialog = true) }; return
+        }
         validateForm()
         val state = _uiState.value
         if (!state.isFormValid) return
@@ -127,9 +137,42 @@ class EditEventViewModel @Inject constructor(
             photoUri = state.photoUri
         )
         viewModelScope.launch {
+            update { copy(isAnalyzing = true, assessment = null, reviewedEvent = null) }
+            analysis.reviewEvent(userId, updated, eventId, language).fold(
+                onSuccess = { review ->
+                    when {
+                        !review.text.allowed || review.image.relevant == false -> update {
+                            copy(isAnalyzing = false, assessment = review, saveResult = null)
+                        }
+                        review.reviewId == null -> update {
+                            copy(isAnalyzing = false, assessment = review, saveResult = RequestResult.Failure("No se recibió la validación de publicación. Inténtalo de nuevo."))
+                        }
+                        else -> {
+                            val duplicates = review.possibleDuplicates.isNotEmpty()
+                            update { copy(isAnalyzing = false, assessment = review,
+                                reviewedEvent = updated.copy(photoUri = review.approvedPhotoUri, aiReviewId = review.reviewId),
+                                showDuplicateDialog = duplicates, saveResult = if (duplicates) null else RequestResult.Loading) }
+                            if (!duplicates) saveReviewedEvent(false, fromAnalysis = true)
+                        }
+                    }
+                },
+                onFailure = { error -> update { copy(isAnalyzing = false, saveResult = RequestResult.Failure(error.message ?: "No se pudo completar el análisis. Conserva el borrador e inténtalo de nuevo.")) } }
+            )
+        }
+    }
+
+    fun confirmDifferentEvent() { update { copy(showDuplicateDialog = false) }; saveReviewedEvent(true) }
+    fun dismissDuplicates() = update { copy(showDuplicateDialog = false) }
+    fun useSuggestedDescription() { _uiState.value.assessment?.text?.suggestedText?.let(::onDescriptionChange) }
+
+    private fun saveReviewedEvent(confirmed: Boolean, fromAnalysis: Boolean = false) {
+        if ((_uiState.value.saveResult == RequestResult.Loading && !fromAnalysis) || _uiState.value.saveResult == RequestResult.Success) return
+        val updated = _uiState.value.reviewedEvent?.copy(aiDuplicateConfirmed = confirmed) ?: return
+        update { copy(saveResult = RequestResult.Loading) }
+        viewModelScope.launch {
         events.update(userId, updated).fold(
-            onSuccess = { update { copy(saveResult = RequestResult.Success) } },
-            onFailure = { error -> update { copy(saveResult = RequestResult.Failure(error.message ?: "No se pudieron guardar los cambios")) } }
+            onSuccess = { update { copy(saveResult = RequestResult.Success, assessment = null, reviewedEvent = null) } },
+            onFailure = { error -> update { copy(assessment = null, reviewedEvent = null, saveResult = RequestResult.Failure(error.message ?: "No se pudieron guardar los cambios")) } }
         )
         }
     }
@@ -202,10 +245,12 @@ class EditEventViewModel @Inject constructor(
 
     /** Un callback del teclado o selector no puede habilitar otro envío mientras se guarda. */
     private inline fun editForm(transform: EditEventUiState.() -> EditEventUiState) {
+        val before = _uiState.value
         _uiState.update { state ->
             if (state.saveResult == RequestResult.Loading || state.saveResult == RequestResult.Success) state
-            else state.transform()
+            else state.transform().copy(assessment = null, reviewedEvent = null, showDuplicateDialog = false)
         }
+        if (before.assessment != null && _uiState.value.assessment == null) viewModelScope.launch { analysis.discard(before.assessment) }
     }
 
     private inline fun update(transform: EditEventUiState.() -> EditEventUiState) {

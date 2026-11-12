@@ -84,6 +84,7 @@ class EventUseCases @Inject constructor(
                     isOutdoor = event.isOutdoor,
                     category = event.category, startsAt = event.startsAt, endsAt = event.endsAt, capacity = event.capacity,
                     price = event.price, photoUri = photo, moderationStatus = EventModerationStatus.PENDING,
+                    aiReviewId = event.aiReviewId, aiDuplicateConfirmed = event.aiDuplicateConfirmed,
                     rejectionReason = null, attendeeCount = confirmed, submittedAtLabel = "ahora"
                 ))
             }

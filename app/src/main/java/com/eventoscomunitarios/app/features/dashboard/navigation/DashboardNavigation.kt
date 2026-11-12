@@ -117,7 +117,8 @@ fun DashboardNavigation(
                     CreateEventScreen(
                         viewModel = createEventViewModel,
                         onCloseClick = { navController.popBackStack() },
-                        onEventCreated = { navController.popBackStack() }
+                        onEventCreated = { navController.popBackStack() },
+                        onOpenSimilarEvent = { id -> createEventViewModel.dismissDuplicates(); navController.navigate(DashboardRoutes.EventDetail(id, user.id)) }
                     )
                 } else {
                     LaunchedEffect(entry.id) { navController.popBackStack() }
@@ -130,7 +131,8 @@ fun DashboardNavigation(
                     EditEventScreen(
                         viewModel = editEventViewModel,
                         onCloseClick = { navController.popBackStack() },
-                        onChangesSaved = { navController.popBackStack() }
+                        onChangesSaved = { navController.popBackStack() },
+                        onOpenSimilarEvent = { id -> editEventViewModel.dismissDuplicates(); navController.navigate(DashboardRoutes.EventDetail(id, user.id)) }
                     )
                 } else {
                     LaunchedEffect(entry.id) { navController.popBackStack() }

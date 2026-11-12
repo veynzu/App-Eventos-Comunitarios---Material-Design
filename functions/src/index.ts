@@ -6,6 +6,7 @@ import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
 import { distanceKm, parseEventDraft, parseTextInput, requireActiveProfile, type EventDraft, type NearbyEvent } from "./analysis";
 import { GeminiAnalysis } from "./gemini";
+import { randomUUID } from "node:crypto";
 
 initializeApp();
 setGlobalOptions({ region: "us-central1", minInstances: 0, maxInstances: 2, memory: "256MiB", timeoutSeconds: 60, concurrency: 8,
@@ -54,7 +55,7 @@ async function analyze<T>(work: () => Promise<T>): Promise<T> {
 export const aiStatus = onCall({ enforceAppCheck: false }, async request => {
   await activeUid(request);
   return { provider: "gemini", enabled: enabled(), modelConfigured: Boolean(model()),
-    appCheckEnforced: false, preparationOnly: true, region: "us-central1", contractVersion: 1 };
+    appCheckEnforced: false, preparationOnly: false, region: "us-central1", contractVersion: 1 };
 });
 
 /** Prevalidaciones: no son autorizaciones de publicación y no guardan eventos ni comentarios. */
@@ -63,7 +64,12 @@ export const analyzeText = onCall({ enforceAppCheck: false, secrets: geminiKey ?
   const input = parseTextInput(request.data);
   const client = provider();
   await reserveQuota(uid);
-  return client.text(input);
+  const assessment = await client.text(input);
+  const reviewId = assessment.allowed ? randomUUID() : null;
+  if (reviewId) await db.collection("aiReviews").doc(reviewId).create({
+    kind: "text", uid, text: input.text, expiresAt: Date.now() + 15 * 60_000,
+  });
+  return { ...assessment, reviewId };
 }));
 
 async function nearbyEvents(draft: EventDraft): Promise<{ events: NearbyEvent[]; truncated: boolean }> {
@@ -104,12 +110,40 @@ export const analyzeEventDraft = onCall({ enforceAppCheck: false, secrets: gemin
   const client = provider();
   if (draft.sourceEventId !== null) {
     const source = (await db.collection("events").doc(String(draft.sourceEventId)).get()).data();
-    if (!source || source.organizerId !== uid) throw new HttpsError("permission-denied", "El evento de origen no te pertenece.");
+    const actor = (await db.collection("users").doc(uid).get()).data();
+    if (!source || source.isDeleted || (source.organizerId !== uid && actor?.role !== "ADMINISTRATOR")) {
+      throw new HttpsError("permission-denied", "No puedes analizar este evento de origen.");
+    }
   }
   await reserveQuota(uid);
   const [nearby, image] = await Promise.all([nearbyEvents(draft), imageFor(draft)]);
   const assessment = await client.event(draft, nearby.events, image);
-  return { ...assessment, candidatesTruncated: nearby.truncated, candidates: nearby.events.map(e => ({
+  const reviewId = assessment.text.allowed && assessment.image.relevant !== false ? randomUUID() : null;
+  let approvedPhotoUri: string | null = null;
+  let validatedPath: string | null = null;
+  try {
+    if (reviewId) {
+      if (image) {
+        // Copia los bytes que realmente evaluó el modelo a una ruta que el cliente no puede crear ni reemplazar.
+        const token = randomUUID();
+        const bucket = getStorage().bucket();
+        validatedPath = `validated-events/${uid}/${reviewId}`;
+        await bucket.file(validatedPath).save(image.bytes, { resumable: false, validation: "crc32c",
+          metadata: { contentType: image.mimeType, metadata: { ownerId: uid, firebaseStorageDownloadTokens: token } } });
+        approvedPhotoUri = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(validatedPath)}?alt=media&token=${token}`;
+      }
+      await db.collection("aiReviews").doc(reviewId).create({ kind: "event", uid,
+        title: draft.title, description: draft.description, category: draft.category,
+        latitude: draft.latitude, longitude: draft.longitude, startsAt: draft.startsAt, endsAt: draft.endsAt,
+        sourceEventId: draft.sourceEventId, photoUri: approvedPhotoUri,
+        hasDuplicates: assessment.possibleDuplicates.length > 0, expiresAt: Date.now() + 15 * 60_000,
+      });
+    }
+  } catch (error) {
+    if (validatedPath) await getStorage().bucket().file(validatedPath).delete({ ignoreNotFound: true }).catch(() => undefined);
+    throw error;
+  }
+  return { ...assessment, reviewId, approvedPhotoUri, candidatesTruncated: nearby.truncated, candidates: nearby.events.map(e => ({
     eventId: e.eventId, title: e.title, startsAt: e.startsAt, distanceKm: distanceKm(draft, e),
   })) };
 }));

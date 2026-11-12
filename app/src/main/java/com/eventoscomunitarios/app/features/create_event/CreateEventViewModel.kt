@@ -13,6 +13,8 @@ import com.eventoscomunitarios.app.domain.model.Coordinates
 import com.eventoscomunitarios.app.core.util.eventFormTime
 import com.eventoscomunitarios.app.domain.usecase.EventUseCases
 import com.eventoscomunitarios.app.domain.usecase.UserUseCases
+import com.eventoscomunitarios.app.domain.usecase.ContentAnalysisUseCases
+import com.eventoscomunitarios.app.domain.model.EventAssessment
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,7 +52,11 @@ data class CreateEventUiState(
     val descriptionError: String? = null,
     val capacityError: String? = null,
     val priceError: String? = null,
-    val publishResult: RequestResult? = null
+    val publishResult: RequestResult? = null,
+    val isAnalyzing: Boolean = false,
+    val assessment: EventAssessment? = null,
+    val reviewedEvent: Event? = null,
+    val showDuplicateDialog: Boolean = false
 ) {
     val isFormValid: Boolean
         get() = title.isNotBlank() && category.isNotBlank() && date.isNotBlank() &&
@@ -64,7 +70,8 @@ data class CreateEventUiState(
 class CreateEventViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val events: EventUseCases,
-    private val users: UserUseCases
+    private val users: UserUseCases,
+    private val analysis: ContentAnalysisUseCases
 ) : ViewModel() {
     private val userId: String = savedStateHandle["userId"] ?: ""
     private val sourceEventId: Int? = savedStateHandle["sourceEventId"]
@@ -109,8 +116,11 @@ class CreateEventViewModel @Inject constructor(
     }
     fun onOutdoorChange(value: Boolean) = editForm { copy(isOutdoor = value, publishResult = null) }
 
-    fun publishEvent() {
+    fun publishEvent(language: String = "es") {
         if (_uiState.value.publishResult == RequestResult.Loading || _uiState.value.publishResult == RequestResult.Success) return
+        if (_uiState.value.reviewedEvent != null && _uiState.value.assessment?.possibleDuplicates?.isNotEmpty() == true) {
+            update { copy(showDuplicateDialog = true) }; return
+        }
         validateForm()
         val state = _uiState.value
         if (!state.isFormValid) return
@@ -133,9 +143,42 @@ class CreateEventViewModel @Inject constructor(
             moderationStatus = EventModerationStatus.PENDING, submittedAtLabel = "ahora"
         )
         viewModelScope.launch {
+            update { copy(isAnalyzing = true, assessment = null, reviewedEvent = null) }
+            analysis.reviewEvent(userId, event, sourceEventId, language).fold(
+                onSuccess = { review ->
+                    when {
+                        !review.text.allowed || review.image.relevant == false -> update {
+                            copy(isAnalyzing = false, assessment = review, publishResult = null)
+                        }
+                        review.reviewId == null -> update {
+                            copy(isAnalyzing = false, assessment = review, publishResult = RequestResult.Failure("No se recibió la validación de publicación. Inténtalo de nuevo."))
+                        }
+                        else -> {
+                            val duplicates = review.possibleDuplicates.isNotEmpty()
+                            update { copy(isAnalyzing = false, assessment = review,
+                                reviewedEvent = event.copy(photoUri = review.approvedPhotoUri, aiReviewId = review.reviewId),
+                                showDuplicateDialog = duplicates, publishResult = if (duplicates) null else RequestResult.Loading) }
+                            if (!duplicates) saveReviewedEvent(false, fromAnalysis = true)
+                        }
+                    }
+                },
+                onFailure = { error -> update { copy(isAnalyzing = false, publishResult = RequestResult.Failure(error.message ?: "No se pudo completar el análisis. Conserva el borrador e inténtalo de nuevo.")) } }
+            )
+        }
+    }
+
+    fun confirmDifferentEvent() { update { copy(showDuplicateDialog = false) }; saveReviewedEvent(true) }
+    fun dismissDuplicates() = update { copy(showDuplicateDialog = false) }
+    fun useSuggestedDescription() { _uiState.value.assessment?.text?.suggestedText?.let(::onDescriptionChange) }
+
+    private fun saveReviewedEvent(confirmed: Boolean, fromAnalysis: Boolean = false) {
+        if ((_uiState.value.publishResult == RequestResult.Loading && !fromAnalysis) || _uiState.value.publishResult == RequestResult.Success) return
+        val event = _uiState.value.reviewedEvent?.copy(aiDuplicateConfirmed = confirmed) ?: return
+        update { copy(publishResult = RequestResult.Loading) }
+        viewModelScope.launch {
         (if (sourceEventId == null) events.create(userId, event) else events.relaunch(userId, sourceEventId, event)).fold(
-            onSuccess = { update { copy(publishResult = RequestResult.Success) } },
-            onFailure = { error -> update { copy(publishResult = RequestResult.Failure(error.message ?: "No se pudo publicar el evento")) } }
+            onSuccess = { update { copy(publishResult = RequestResult.Success, assessment = null, reviewedEvent = null) } },
+            onFailure = { error -> update { copy(assessment = null, reviewedEvent = null, publishResult = RequestResult.Failure(error.message ?: "No se pudo publicar el evento")) } }
         )
         }
     }
@@ -176,10 +219,12 @@ class CreateEventViewModel @Inject constructor(
 
     /** Un callback del teclado o selector no puede habilitar otro envío mientras se guarda. */
     private inline fun editForm(transform: CreateEventUiState.() -> CreateEventUiState) {
+        val before = _uiState.value
         _uiState.update { state ->
             if (!state.sourceReady || state.publishResult == RequestResult.Loading || state.publishResult == RequestResult.Success) state
-            else state.transform()
+            else state.transform().copy(assessment = null, reviewedEvent = null, showDuplicateDialog = false)
         }
+        if (before.assessment != null && _uiState.value.assessment == null) viewModelScope.launch { analysis.discard(before.assessment) }
     }
 
     private inline fun update(transform: CreateEventUiState.() -> CreateEventUiState) {

@@ -14,6 +14,8 @@ import com.eventoscomunitarios.app.domain.model.UserRole
 import com.eventoscomunitarios.app.domain.usecase.CommunityUseCases
 import com.eventoscomunitarios.app.domain.usecase.EventUseCases
 import com.eventoscomunitarios.app.domain.usecase.UserUseCases
+import com.eventoscomunitarios.app.domain.usecase.ContentAnalysisUseCases
+import com.eventoscomunitarios.app.domain.model.TextAssessment
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -56,7 +58,11 @@ data class EventDetailUiState(
     val negativeVotes: Int = 0,
     val currentUserId: String = "",
     val isModerator: Boolean = false,
-    val commentToDelete: Int? = null
+    val commentToDelete: Int? = null,
+    val canContribute: Boolean = false,
+    val isContribution: Boolean = false,
+    val isAnalyzingComment: Boolean = false,
+    val textAssessment: TextAssessment? = null
 )
 
 @HiltViewModel
@@ -64,7 +70,8 @@ class EventDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val events: EventUseCases,
     private val users: UserUseCases,
-    private val community: CommunityUseCases
+    private val community: CommunityUseCases,
+    private val analysis: ContentAnalysisUseCases
 ) : ViewModel() {
     private val eventId: Int? = savedStateHandle["eventId"]
     private val userId: String = savedStateHandle["userId"] ?: ""
@@ -122,10 +129,15 @@ class EventDetailViewModel @Inject constructor(
     }
 
     fun onCommentChange(value: String) {
-        if (!_uiState.value.isSaving) _uiState.update { it.copy(commentText = value, commentError = null) }
+        if (!_uiState.value.isSaving) _uiState.update { it.copy(commentText = value, commentError = null, textAssessment = null) }
     }
 
-    fun addComment() {
+    fun selectContribution(value: Boolean) {
+        if (!_uiState.value.isSaving) _uiState.update { it.copy(isContribution = value, commentError = null, textAssessment = null) }
+    }
+    fun useSuggestedComment() { _uiState.value.textAssessment?.suggestedText?.takeIf { it.length <= 1000 }?.let(::onCommentChange) }
+
+    fun addComment(language: String = "es") {
         val id = eventId ?: return
         val text = _uiState.value.commentText.trim()
         if (text.isBlank() || text.length > 1000) {
@@ -133,10 +145,25 @@ class EventDetailViewModel @Inject constructor(
             return
         }
         launchAction {
-            community.addComment(userId, id, text).fold(
+            val contribution = _uiState.value.isContribution || !_uiState.value.canComment
+            if (if (contribution) !_uiState.value.canContribute else !_uiState.value.canComment) return@launchAction
+            _uiState.update { it.copy(isAnalyzingComment = true, textAssessment = null, commentError = null) }
+            val review = try { analysis.analyzeText(text, language).getOrThrow() }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _uiState.update { it.copy(commentError = error.toFirebaseMessage()) }
+                return@launchAction
+            } finally { _uiState.update { it.copy(isAnalyzingComment = false) } }
+            _uiState.update { it.copy(textAssessment = review) }
+            if (!review.allowed) return@launchAction
+            if (review.reviewId == null) {
+                _uiState.update { it.copy(commentError = "No se recibió la validación de publicación. Inténtalo de nuevo.") }
+                return@launchAction
+            }
+            community.addComment(userId, id, text, review.reviewId, contribution).fold(
                 onSuccess = {
                     refresh()
-                    _uiState.update { it.copy(commentText = "", commentError = null, message = "Comentario publicado") }
+                    _uiState.update { it.copy(commentText = "", commentError = null, textAssessment = null, message = "Comentario publicado") }
                 },
                 onFailure = { failure -> _uiState.update { it.copy(commentError = failure.toFirebaseMessage()) } }
             )
@@ -213,6 +240,7 @@ class EventDetailViewModel @Inject constructor(
                     .sortedWith(compareBy<EventComment> { comment -> comment.createdAt }.thenBy { comment -> comment.id })
                     .map { comment -> comment.copy(authorName = users.findUser(comment.userId)?.name ?: comment.authorName) },
                 canComment = community.canComment(userId, event.id),
+                canContribute = community.canContribute(userId, event.id),
                 canRelaunch = events.canRelaunch(userId, event),
                 canVote = canInteract && user.id != event.organizerId,
                 myVote = eventVotes.firstOrNull { vote -> vote.userId == userId }?.value ?: 0,

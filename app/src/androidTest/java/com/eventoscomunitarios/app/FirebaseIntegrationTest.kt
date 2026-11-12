@@ -95,7 +95,7 @@ class FirebaseIntegrationTest {
         val b = client()
         val bUser = b.users.register("Participante B", "b-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.PARTICIPANT).getOrThrow()
         waitUntil { listOf(owner, a, b).all { it.users.findUser(author.id) != null && it.users.findUser(aUser.id) != null && it.users.findUser(bUser.id) != null } }
-        val event = owner.events.create(author.id, draft(author.id, author.name)).getOrThrow()
+        val event = owner.events.create(author.id, reviewedDraft(author.id, draft(author.id, author.name))).getOrThrow()
         assertTrue(owner.events.moderate(author.id, event.id, EventModerationStatus.REJECTED, " ").isFailure)
         owner.events.moderate(author.id, event.id, EventModerationStatus.APPROVED).getOrThrow()
         waitUntil { a.events.findEvent(event.id)?.moderationStatus == EventModerationStatus.APPROVED && b.events.findEvent(event.id)?.moderationStatus == EventModerationStatus.APPROVED }
@@ -122,7 +122,7 @@ class FirebaseIntegrationTest {
         ))
         waitUntil { reviewer.events.findEvent(event.id)?.hasEnded == true }
         println("Integración: reseña posterior a la participación")
-        val comment = reviewer.community.addComment(promotedId, event.id, "Comentario persistido").getOrThrow()
+        val comment = reviewer.community.addComment(promotedId, event.id, "Comentario persistido", reviewedText(promotedId, "Comentario persistido")).getOrThrow()
         a.community.vote(aUser.id, event.id, 1).getOrThrow()
         a.community.toggleFavorite(aUser.id, event.id).getOrThrow()
         a.community.toggleFollow(aUser.id, author.id).getOrThrow()
@@ -151,7 +151,7 @@ class FirebaseIntegrationTest {
         val viewer = client()
         val participant = viewer.users.register("Público recurrente", "series-viewer-${UUID.randomUUID()}@example.test", PASSWORD, null, UserRole.PARTICIPANT).getOrThrow()
         waitUntil { owner.users.findUser(participant.id) != null && viewer.users.findUser(author.id) != null }
-        val original = owner.events.create(author.id, draft(author.id, author.name)).getOrThrow()
+        val original = owner.events.create(author.id, reviewedDraft(author.id, draft(author.id, author.name))).getOrThrow()
         owner.events.moderate(author.id, original.id, EventModerationStatus.APPROVED).getOrThrow()
         waitUntil { viewer.events.findEvent(original.id)?.moderationStatus == EventModerationStatus.APPROVED }
         viewer.community.toggleFavorite(participant.id, original.id).getOrThrow()
@@ -161,8 +161,8 @@ class FirebaseIntegrationTest {
             "endsAt" to mapOf("integerValue" to (System.currentTimeMillis() - 1000).toString())
         ))
         waitUntil { owner.events.findEvent(original.id)?.hasEnded == true && viewer.events.findEvent(original.id)?.hasEnded == true }
-        val comment = viewer.community.addComment(participant.id, original.id, "Primera edición disfrutada").getOrThrow()
-        val next = owner.events.relaunch(author.id, original.id, draft(author.id, author.name)).getOrThrow()
+        val comment = viewer.community.addComment(participant.id, original.id, "Primera edición disfrutada", reviewedText(participant.id, "Primera edición disfrutada")).getOrThrow()
+        val next = owner.events.relaunch(author.id, original.id, reviewedDraft(author.id, draft(author.id, author.name), original.id)).getOrThrow()
         assertEquals(original.seriesId, next.seriesId)
         assertEquals(EventModerationStatus.PENDING, next.moderationStatus)
         assertEquals(0, next.attendeeCount)
@@ -188,7 +188,8 @@ class FirebaseIntegrationTest {
             "organizerVerificationStatus" to mapOf("stringValue" to OrganizerVerificationStatus.VERIFIED.name)))
         waitUntil { client.users.findUser(user.id)?.canCreateEvents == true }
         val uri = imageUri()
-        val event = client.events.create(user.id, draft(user.id, user.name).copy(photoUri = uri.toString())).getOrThrow()
+        val uploaded = client.media.uploadImage(user.id, uri.toString(), "events")
+        val event = client.events.create(user.id, reviewedDraft(user.id, draft(user.id, user.name).copy(photoUri = uploaded))).getOrThrow()
         val remoteUrl = requireNotNull(event.photoUri)
         assertFalse(remoteUrl.startsWith("content:"))
         assertEquals(remoteUrl, client.db.collection("events").document(event.id.toString()).get(Source.SERVER).await().getString("photoUri"))
@@ -196,7 +197,7 @@ class FirebaseIntegrationTest {
         client.users.updateProfile(user.id, user.name, user.email, null, photoUri = uri.toString()).getOrThrow()
         val profileImage = client.db.collection("users").document(user.id).get(Source.SERVER).await().getString("profilePictureUrl")!!
         assertTrue(client.storage.imageReference(profileImage).getBytes(1_000_000).await().isNotEmpty())
-        val withoutPhoto = client.events.update(user.id, event.copy(photoUri = null)).getOrThrow()
+        val withoutPhoto = client.events.update(user.id, reviewedDraft(user.id, event.copy(photoUri = null), event.id)).getOrThrow()
         assertNull(withoutPhoto.photoUri)
         val deletedImage = runCatching { client.storage.imageReference(remoteUrl).getMetadata().await() }.exceptionOrNull()
         assertTrue(deletedImage is com.google.firebase.storage.StorageException &&
@@ -232,7 +233,7 @@ class FirebaseIntegrationTest {
         assertTrue(viewer.users.reviewOrganizerIdentity(participant.id, organizer.id, identity.photoPath, true).isFailure)
         moderator.users.reviewOrganizerIdentity(admin.id, organizer.id, identity.photoPath, true).getOrThrow()
         waitUntil { owner.users.findUser(organizer.id)?.canCreateEvents == true }
-        assertTrue(owner.events.create(organizer.id, draft(organizer.id, organizer.name)).isSuccess)
+        assertTrue(owner.events.create(organizer.id, reviewedDraft(organizer.id, draft(organizer.id, organizer.name))).isSuccess)
         owner.users.deleteAccount(organizer.id, PASSWORD).getOrThrow()
         assertFalse(moderator.db.collection("organizerVerifications").document(organizer.id).get(Source.SERVER).await().exists())
         assertTrue(runCatching { moderator.media.readPrivateImage(identity.photoPath) }.isFailure)
@@ -305,6 +306,30 @@ class FirebaseIntegrationTest {
         endsAt = System.currentTimeMillis() + 90_000_000, location = "Armenia", distanceKm = 0.0,
         price = 0, category = EventCategory.COMMUNITY, attendeeCount = 0, description = "Prueba multicliente",
         capacity = 1, organizerId = owner, organizerName = name, locationConfirmed = true)
+
+    /** Simula únicamente la emisión del comprobante; Gemini se verifica en pruebas independientes. */
+    private suspend fun reviewedDraft(uid: String, event: Event, sourceId: Int? = null): Event {
+        val reviewId = UUID.randomUUID().toString()
+        fun str(v: String): Map<String, Any> = mapOf("stringValue" to v)
+        fun num(v: Long): Map<String, Any> = mapOf("integerValue" to v.toString())
+        fixtureUpdate("aiReviews/$reviewId", mapOf(
+            "kind" to str("event"), "uid" to str(uid), "title" to str(event.title.trim()),
+            "description" to str(event.description.trim()), "category" to str(event.category.name),
+            "latitude" to mapOf("doubleValue" to event.latitude), "longitude" to mapOf("doubleValue" to event.longitude),
+            "startsAt" to num(event.startsAt), "endsAt" to num(event.endsAt),
+            "sourceEventId" to (sourceId?.let { num(it.toLong()) } ?: mapOf("nullValue" to JSONObject.NULL)),
+            "photoUri" to (event.photoUri?.let(::str) ?: mapOf("nullValue" to JSONObject.NULL)),
+            "hasDuplicates" to mapOf("booleanValue" to false), "expiresAt" to num(System.currentTimeMillis() + 900_000)
+        ))
+        return event.copy(aiReviewId = reviewId)
+    }
+
+    private suspend fun reviewedText(uid: String, text: String): String {
+        val id = UUID.randomUUID().toString()
+        fixtureUpdate("aiReviews/$id", mapOf("kind" to mapOf("stringValue" to "text"), "uid" to mapOf("stringValue" to uid),
+            "text" to mapOf("stringValue" to text), "expiresAt" to mapOf("integerValue" to (System.currentTimeMillis() + 900_000).toString())))
+        return id
+    }
 
     /** Fixture administrativa SOLO en el emulador local, nunca en el proyecto real. */
     private suspend fun fixtureUpdate(path: String, fields: Map<String, Map<String, Any>>) = withContext(Dispatchers.IO) {

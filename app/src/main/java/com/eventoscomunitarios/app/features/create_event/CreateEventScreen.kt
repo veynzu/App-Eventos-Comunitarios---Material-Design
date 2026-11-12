@@ -49,12 +49,15 @@ import androidx.compose.ui.res.stringResource
 fun CreateEventScreen(
     onCloseClick: () -> Unit,
     onEventCreated: () -> Unit,
-    viewModel: CreateEventViewModel = hiltViewModel()
+    viewModel: CreateEventViewModel = hiltViewModel(),
+    onOpenSimilarEvent: (Int) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
+    val language = androidx.compose.ui.platform.LocalConfiguration.current.locales[0].language.let { if (it == "en") "en" else "es" }
+    androidx.activity.compose.BackHandler(enabled = state.publishResult == RequestResult.Loading) { }
     Column(Modifier.fillMaxSize()) {
         TopAppBar(title = { Text(if (state.sourceEventId == null) stringResource(R.string.ui_create_event) else stringResource(R.string.new_event_edition)) }, navigationIcon = {
-            IconButton(onClick = onCloseClick) { Icon(Icons.Default.Close, stringResource(R.string.ui_close)) }
+            IconButton(onClick = onCloseClick, enabled = state.publishResult != RequestResult.Loading) { Icon(Icons.Default.Close, stringResource(R.string.ui_close)) }
         })
         Box(Modifier.weight(1f).fillMaxWidth()) {
             Column(
@@ -84,19 +87,24 @@ fun CreateEventScreen(
                 }
                 Text(stringResource(R.string.ui_waitlist_help),
                     style = MaterialTheme.typography.bodySmall)
+                com.eventoscomunitarios.app.core.components.EventAnalysisFeedback(state.assessment, viewModel::useSuggestedDescription)
                 (state.publishResult as? RequestResult.Failure)?.let {
                     Text(localizedMessage(it.message), color = MaterialTheme.colorScheme.error)
                 }
             }
         }
         Button(
-            onClick = viewModel::publishEvent,
+            onClick = { viewModel.publishEvent(language) },
             enabled = state.sourceReady && state.publishResult != RequestResult.Loading && state.publishResult != RequestResult.Success,
             modifier = Modifier.fillMaxWidth().padding(16.dp).imePadding()
-        ) { Text(stringResource(R.string.ui_publish_event)) }
+        ) { Text(stringResource(if (state.isAnalyzing) R.string.ai_analyzing else R.string.ui_publish_event)) }
     }
     if (state.showLocationPicker) LocationPickerDialog(state.coordinates, state.address, viewModel::closeLocationPicker, viewModel::onLocationSelected)
     if (state.publishResult == RequestResult.Loading) LoadingIndicator()
+    if (state.showDuplicateDialog) state.assessment?.let { review ->
+        com.eventoscomunitarios.app.core.components.DuplicateEventsDialog(review, onOpenSimilarEvent,
+            viewModel::confirmDifferentEvent, viewModel::dismissDuplicates)
+    }
     if (state.publishResult == RequestResult.Success) {
         AlertDialog(
             onDismissRequest = {},

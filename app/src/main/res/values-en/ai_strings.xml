@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_analyzing">Analyzing content and image…</string>
+    <string name="ai_analyzing_text">Analyzing text…</string>
+    <string name="ai_text_rejected">Review the text before posting</string>
+    <string name="ai_suggestion">Suggested alternative</string>
+    <string name="ai_use_suggestion">Use suggestion</string>
+    <string name="ai_image_rejected">Choose another image: %1$s</string>
+    <string name="ai_duplicates_title">We found similar posts</string>
+    <string name="ai_duplicates_help">Review these nearby events. You can contribute information to an existing post instead of creating another one.</string>
+    <string name="ai_open_contribute">View event and contribute information</string>
+    <string name="ai_different_event">This is a different event, continue</string>
+    <string name="ai_search_truncated">The search reached its limit; other similar events may exist.</string>
+    <string name="ai_contribution">Information contribution</string>
+    <string name="ai_contribution_help">Share useful information about this event. Attendance reviews become available after the event ends.</string>
+    <string name="ai_contribution_publish">Post contribution</string>
+</resources>

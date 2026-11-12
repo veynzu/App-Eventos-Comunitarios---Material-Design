@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_analyzing">Analizando contenido e imagen…</string>
+    <string name="ai_analyzing_text">Analizando texto…</string>
+    <string name="ai_text_rejected">Revisa el texto antes de publicar</string>
+    <string name="ai_suggestion">Propuesta alternativa</string>
+    <string name="ai_use_suggestion">Usar propuesta</string>
+    <string name="ai_image_rejected">Selecciona otra imagen: %1$s</string>
+    <string name="ai_duplicates_title">Encontramos publicaciones similares</string>
+    <string name="ai_duplicates_help">Revisa estos eventos cercanos. Puedes aportar información al que ya existe en lugar de crear otra publicación.</string>
+    <string name="ai_open_contribute">Ver evento y aportar información</string>
+    <string name="ai_different_event">Es un evento diferente, continuar</string>
+    <string name="ai_search_truncated">La búsqueda alcanzó su límite; puede haber otros eventos similares.</string>
+    <string name="ai_contribution">Aporte de información</string>
+    <string name="ai_contribution_help">Comparte información útil sobre este evento. Las reseñas de asistencia se habilitan al finalizar.</string>
+    <string name="ai_contribution_publish">Publicar aporte</string>
+</resources>
