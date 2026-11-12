@@ -14,6 +14,8 @@ import com.eventoscomunitarios.app.domain.usecase.UserUseCases
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.UserRole
+import com.eventoscomunitarios.app.domain.model.AccountStatus
+import com.eventoscomunitarios.app.domain.model.OrganizerVerificationStatus
 import com.eventoscomunitarios.app.features.auth.SessionViewModel
 import com.eventoscomunitarios.app.features.auth.validationErrors
 import com.eventoscomunitarios.app.features.home.HomeViewModel
@@ -57,6 +59,33 @@ class AuthViewModelTest {
         login.login()
         assertTrue(login.uiState.value.loginResult is RequestResult.Failure)
         assertNull(login.uiState.value.authenticatedUser)
+    }
+
+    @Test fun suspendedAccountErrorRemainsVisibleAfterTransientResultIsConsumed() = onMain {
+        val login = LoginViewModel(data.users)
+        login.onEmailChange("diego.ramirez@correo.com")
+        login.onPasswordChange("Participante123")
+        login.login()
+        assertEquals("Tu cuenta está suspendida. Contacta al administrador.", login.uiState.value.loginError)
+        login.clearLoginResult()
+        assertNull(login.uiState.value.loginResult)
+        assertNotNull(login.uiState.value.loginError)
+        assertNull(login.uiState.value.authenticatedUser)
+        login.onEmailChange("ana.torres@correo.com")
+        assertNull(login.uiState.value.loginError)
+    }
+
+    @Test fun rejectedOrganizerLoginShowsBlockedStatus() = onMain {
+        val user = data.users.findUser("organizer-carlos")!!
+        data.userRepository.save(user.copy(accountStatus = AccountStatus.SUSPENDED,
+            organizerVerificationStatus = OrganizerVerificationStatus.REJECTED))
+        val login = LoginViewModel(data.users)
+        login.onEmailChange(user.email)
+        login.onPasswordChange("Organizador123")
+        login.login()
+        assertEquals("Tu cuenta está bloqueada. Contacta al administrador.", login.uiState.value.loginError)
+        assertNull(login.uiState.value.authenticatedUser)
+        assertNull(data.userRepository.currentUserId.value)
     }
 
     @Test fun loginLetsFirebaseValidateExistingShortPasswords() = onMain {

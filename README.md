@@ -13,6 +13,8 @@ Aplicación académica de eventos comunitarios. Conserva Kotlin, Compose, Materi
 
 El acceso usa las credenciales existentes de Firebase, sin imponer al iniciar sesión la política de longitud del registro. Una cuenta existente con contraseña corta puede enviarla a Authentication para validación; el registro conserva sus requisitos. No se asignan permisos por la dirección de correo: el rol viene del documento de perfil.
 
+Después de validar las credenciales, el acceso comprueba el estado antes de publicar la sesión. Una cuenta suspendida ve «Tu cuenta está suspendida. Contacta al administrador.»; un organizador suspendido por rechazo de su cédula ve «Tu cuenta está bloqueada. Contacta al administrador.». El aviso permanece visible en el formulario hasta editar las credenciales o reintentar, y tiene traducción al inglés. Las credenciales incorrectas conservan el mensaje genérico.
+
 El 10 de noviembre de 2026 se publicaron las reglas de este flujo en Firestore y Storage del proyecto `share-you-6a706`. Cambiar los archivos locales o recompilar después de esta publicación no despliega nuevas versiones de reglas.
 
 La navegación sigue la [guía 11 del profesor](https://caflorezvi.github.io/guias-apps-moviles/11.navegacion-2.html): `navigation/AppNavigation.kt` contiene el acceso público y la entrada al dashboard. `features/dashboard/MainScreen.kt` mantiene un único `Scaffold`, la barra inferior y los mensajes compartidos; `features/dashboard/navigation/DashboardNavigation.kt` contiene su `NavHost` interno. Las pantallas conservan sus features y ViewModels, y usan contenedores de contenido sin repetir el `Scaffold` del dashboard. El selector de ubicación es un diálogo de pantalla completa independiente.
@@ -95,6 +97,8 @@ Los eventos anteriores sin `locationConfirmed` se consideran sin ubicación conf
 **Volver a lanzar** aparece en Mis eventos → Creados y en el detalle del evento terminado para su creador. Copia información, sitio, foto y horas, y exige elegir nuevas fechas. Crea otra publicación pendiente de aprobación; no copia inscripciones ni reseñas. Las fotos reutilizadas se conservan mientras otra edición las use. La repetición es manual: cada fecha pasa por aprobación y cada persona confirma nuevamente su asistencia.
 
 ## Compilar y comprobar
+
+La configuración de Cloud Functions para análisis con IA, pruebas y pasos pendientes está en [functions/README.md](functions/README.md). Están desplegadas las prevalidaciones `analyzeText` y `analyzeEventDraft` con Gemini y App Check, además de `aiStatus`. Gemini usa un proyecto independiente sin facturación. Los formularios de publicar/comentar todavía no llaman a estas prevalidaciones; falta integrar sus resultados y el guardado validado en el servidor.
 
 Abrir en Android Studio, sincronizar Gradle y ejecutar `app`. Se mantienen SDK/Gradle del proyecto. El criterio JVM solicita **Microsoft OpenJDK 25** (`toolchainVendor=MICROSOFT`); `JAVA_HOME` debe apuntar a un **JDK completo**, con `jlink`. Usar el mismo JDK para Gradle en Android Studio. El proveedor se fija en `gradle/gradle-daemon-jvm.properties` porque esos criterios tienen prioridad sobre el JDK seleccionado en el IDE y evitan reutilizar el Java incompleto de una extensión.
 

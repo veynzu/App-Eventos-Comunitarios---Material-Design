@@ -28,7 +28,8 @@ class UserUseCases @Inject constructor(
 
     suspend fun login(email: String, password: String): Result<User> = firebaseResult {
         val user = userRepository.login(email.trim(), password)
-        require(user.accountStatus == AccountStatus.ACTIVE) { "La cuenta está suspendida" }
+        try { user.requireActiveAccount() }
+        catch (error: IllegalStateException) { userRepository.signOut(); throw error }
         user
     }
 

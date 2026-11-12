@@ -2,7 +2,7 @@ package com.eventoscomunitarios.app.features.login
 
 import com.eventoscomunitarios.app.core.util.localizedMessage
 
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 
 import androidx.compose.ui.res.stringResource
 import com.eventoscomunitarios.app.R
@@ -52,6 +52,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -86,7 +89,6 @@ fun LoginScreen(
     onCrearCuenta: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(state.loginResult) {
@@ -98,7 +100,6 @@ fun LoginScreen(
             }
 
             is RequestResult.Failure -> {
-                snackbarHostState.showSnackbar(context.localizedMessage(result.message))
                 viewModel.clearLoginResult()
             }
 
@@ -347,6 +348,16 @@ private fun LoginContent(
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            state.loginError?.let { error ->
+                Text(
+                    text = localizedMessage(error),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).testTag("login_error")
+                        .semantics { liveRegion = LiveRegionMode.Polite }
+                )
             }
 
             Column(

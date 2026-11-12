@@ -24,6 +24,7 @@ import java.util.UUID
 import org.json.JSONObject
 import org.json.JSONArray
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.tasks.await
 import org.junit.After
 import org.junit.Assert.*
@@ -235,6 +236,43 @@ class FirebaseIntegrationTest {
         owner.users.deleteAccount(organizer.id, PASSWORD).getOrThrow()
         assertFalse(moderator.db.collection("organizerVerifications").document(organizer.id).get(Source.SERVER).await().exists())
         assertTrue(runCatching { moderator.media.readPrivateImage(identity.photoPath) }.isFailure)
+    }
+
+    @Test fun restrictedLoginReportsStatusWithoutPublishingAnAuthenticatedSession() = runBlocking {
+        val original = client()
+        val user = original.users.register("Cuenta restringida", "restricted-${UUID.randomUUID()}@example.test",
+            PASSWORD, null, UserRole.PARTICIPANT).getOrThrow()
+        original.userRepository.signOut()
+        val attempting = client()
+        val publishedIds = mutableListOf<String?>()
+        val publishedProfiles = mutableListOf<User>()
+        val idsJob = launch(Dispatchers.Main.immediate, start = CoroutineStart.UNDISPATCHED) {
+            attempting.userRepository.currentUserId.collect { publishedIds.add(it) }
+        }
+        val profilesJob = launch(Dispatchers.Main.immediate, start = CoroutineStart.UNDISPATCHED) {
+            attempting.userRepository.users.collect { publishedProfiles.addAll(it) }
+        }
+        try {
+            fixtureUpdate("users/${user.id}", mapOf("accountStatus" to mapOf("stringValue" to AccountStatus.SUSPENDED.name)))
+            assertEquals("Tu cuenta está suspendida. Contacta al administrador.",
+                attempting.users.login(user.email, PASSWORD).exceptionOrNull()?.message)
+            assertNull(attempting.auth.currentUser)
+            fixtureUpdate("users/${user.id}", mapOf("role" to mapOf("stringValue" to UserRole.ORGANIZER.name),
+                "organizerVerificationStatus" to mapOf("stringValue" to OrganizerVerificationStatus.REJECTED.name)))
+            assertEquals("Tu cuenta está bloqueada. Contacta al administrador.",
+                attempting.users.login(user.email, PASSWORD).exceptionOrNull()?.message)
+            assertNull(attempting.auth.currentUser)
+            assertEquals("Correo o contraseña incorrectos.",
+                attempting.users.login(user.email, "Incorrecta123").exceptionOrNull()?.message)
+        } finally {
+            idsJob.cancelAndJoin()
+            profilesJob.cancelAndJoin()
+        }
+        assertFalse(user.id in publishedIds)
+        assertFalse(publishedProfiles.any { it.id == user.id })
+        fixtureUpdate("users/${user.id}", mapOf("accountStatus" to mapOf("stringValue" to AccountStatus.ACTIVE.name),
+            "organizerVerificationStatus" to mapOf("stringValue" to OrganizerVerificationStatus.PENDING.name)))
+        assertEquals(user.id, attempting.users.login(user.email, PASSWORD).getOrThrow().id)
     }
 
     private fun client(): Client {

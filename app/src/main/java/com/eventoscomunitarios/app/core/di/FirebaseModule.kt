@@ -2,6 +2,7 @@ package com.eventoscomunitarios.app.core.di
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
 import dagger.Module
 import dagger.Provides
@@ -24,4 +25,8 @@ object FirebaseModule {
     @Provides
     @Singleton
     fun provideStorage(): FirebaseStorage = FirebaseStorage.getInstance()
+
+    @Provides
+    @Singleton
+    fun provideFunctions(): FirebaseFunctions = FirebaseFunctions.getInstance("us-central1")
 }

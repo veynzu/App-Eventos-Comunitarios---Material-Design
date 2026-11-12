@@ -4,6 +4,8 @@ import com.eventoscomunitarios.app.core.data.FirebaseCommunityRepository
 import com.eventoscomunitarios.app.core.data.FirebaseEventRepository
 import com.eventoscomunitarios.app.core.data.FirebaseUserRepository
 import com.eventoscomunitarios.app.core.data.FirebaseMediaRepository
+import com.eventoscomunitarios.app.core.data.FirebaseContentAnalysisRepository
+import com.eventoscomunitarios.app.domain.repository.ContentAnalysisRepository
 import com.eventoscomunitarios.app.domain.repository.CommunityRepository
 import com.eventoscomunitarios.app.domain.repository.EventRepository
 import com.eventoscomunitarios.app.domain.repository.UserRepository
@@ -18,6 +20,9 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
+    @Binds @Singleton
+    abstract fun bindContentAnalysisRepository(implementation: FirebaseContentAnalysisRepository): ContentAnalysisRepository
+
     @Binds @Singleton
     abstract fun bindEventRepository(implementation: FirebaseEventRepository): EventRepository
 

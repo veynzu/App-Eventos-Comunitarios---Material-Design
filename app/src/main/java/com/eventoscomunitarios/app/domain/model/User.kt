@@ -28,6 +28,15 @@ enum class AccountStatus {
     SUSPENDED
 }
 
+/** Un documento rechazado bloquea al organizador; las demás suspensiones son administrativas. */
+fun User.requireActiveAccount() {
+    check(accountStatus == AccountStatus.ACTIVE) {
+        if (role == UserRole.ORGANIZER && organizerVerificationStatus == OrganizerVerificationStatus.REJECTED)
+            "Tu cuenta está bloqueada. Contacta al administrador."
+        else "Tu cuenta está suspendida. Contacta al administrador."
+    }
+}
+
 /** La identidad del organizador se aprueba manualmente; no corresponde a verificar el correo. */
 enum class OrganizerVerificationStatus { NOT_REQUIRED, PENDING, VERIFIED, REJECTED }
 

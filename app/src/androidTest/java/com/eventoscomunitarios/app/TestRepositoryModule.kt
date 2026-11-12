@@ -3,6 +3,8 @@ package com.eventoscomunitarios.app
 import com.eventoscomunitarios.app.core.data.InMemoryCommunityRepository
 import com.eventoscomunitarios.app.core.data.InMemoryEventRepository
 import com.eventoscomunitarios.app.core.data.InMemoryUserRepository
+import com.eventoscomunitarios.app.core.data.InMemoryContentAnalysisRepository
+import com.eventoscomunitarios.app.domain.repository.ContentAnalysisRepository
 import com.eventoscomunitarios.app.core.di.RepositoryModule
 import com.eventoscomunitarios.app.domain.repository.CommunityRepository
 import com.eventoscomunitarios.app.domain.repository.EventRepository
@@ -18,6 +20,8 @@ import javax.inject.Singleton
 @Module
 @TestInstallIn(components = [SingletonComponent::class], replaces = [RepositoryModule::class])
 object TestRepositoryModule {
+    @Provides @Singleton fun contentAnalysis(): ContentAnalysisRepository = InMemoryContentAnalysisRepository()
+
     @Provides @Singleton fun events(): EventRepository = InMemoryEventRepository()
     @Provides @Singleton fun users(): UserRepository = InMemoryUserRepository()
     @Provides @Singleton fun community(): CommunityRepository = InMemoryCommunityRepository()

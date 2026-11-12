@@ -16,3 +16,12 @@ local.properties
 /AGENTS.md
 /MEMORIA_PRIVADA.md
 /app/google-services.json
+/functions/node_modules/
+/functions/lib/
+/functions/.env*
+!/functions/.env.example
+/functions/.secret*
+!/functions/.secret.local.example
+firebase-debug*.log
+firestore-debug.log
+ui-debug.log

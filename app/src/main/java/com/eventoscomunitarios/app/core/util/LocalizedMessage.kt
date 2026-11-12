@@ -14,6 +14,9 @@ fun Context.localizedMessage(message: String): String =
     applicationMessageResources[message]?.let { getString(it) } ?: message
 
 private val applicationMessageResources = mapOf(
+    "Tu cuenta está suspendida. Contacta al administrador." to R.string.login_account_suspended,
+    "Tu cuenta está bloqueada. Contacta al administrador." to R.string.login_account_blocked,
+    "Ya hay un inicio de sesión en curso." to R.string.login_in_progress,
     "No se pudo obtener la ubicación actual. Se muestra Armenia; toca el mapa para elegir el sitio." to R.string.location_current_unavailable,
     "No se pudo obtener la ubicación. Puedes elegir otro punto; se muestra Armenia." to R.string.location_search_unavailable,
     "No se encontró una dirección. Escribe la dirección o referencia del punto seleccionado." to R.string.location_address_unavailable,

@@ -3,6 +3,7 @@ package com.eventoscomunitarios.app.core.data
 import com.eventoscomunitarios.app.domain.model.OrganizerVerificationStatus
 import com.eventoscomunitarios.app.domain.model.UserRole
 import com.eventoscomunitarios.app.domain.model.User
+import com.eventoscomunitarios.app.domain.model.requireActiveAccount
 import com.eventoscomunitarios.app.domain.model.AccountStatus
 import com.eventoscomunitarios.app.domain.model.RepositorySyncState
 import com.eventoscomunitarios.app.domain.repository.UserRepository
@@ -37,7 +38,7 @@ class InMemoryUserRepository @Inject constructor() : UserRepository {
 
     override suspend fun login(email: String, password: String): User {
         val user = requireNotNull(users.value.firstOrNull { it.email.equals(email.trim(), true) && passwords[it.id] == password }) { "Correo o contraseña incorrectos" }
-        require(user.accountStatus == AccountStatus.ACTIVE) { "La cuenta está suspendida" }
+        user.requireActiveAccount()
         mutableCurrentUserId.value = user.id
         return user
     }

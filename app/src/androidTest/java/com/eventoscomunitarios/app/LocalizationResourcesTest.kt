@@ -21,6 +21,10 @@ class LocalizationResourcesTest {
         assertEquals("Enter a valid email address", context("en").localizedMessage("Ingresa un correo válido"))
         assertEquals("Correo o contraseña incorrectos.", context("es").localizedMessage("Correo o contraseña incorrectos."))
         assertEquals("Incorrect email or password.", context("en").localizedMessage("Correo o contraseña incorrectos."))
+        assertEquals("Your account is suspended. Contact the administrator.",
+            context("en").localizedMessage("Tu cuenta está suspendida. Contacta al administrador."))
+        assertEquals("Your account is blocked. Contact the administrator.",
+            context("en").localizedMessage("Tu cuenta está bloqueada. Contacta al administrador."))
     }
 
     @Test fun notificationTemplatesTranslateWithoutChangingAuthorNamesOrEventTitles() {

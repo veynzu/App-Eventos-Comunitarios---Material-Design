@@ -8,7 +8,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import com.eventoscomunitarios.app.core.util.RequestResult
 import com.eventoscomunitarios.app.domain.model.User
-import com.eventoscomunitarios.app.domain.model.AccountStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,7 +21,8 @@ data class LoginUiState(
     val emailError: String? = null,
     val passwordError: String? = null,
     val loginResult: RequestResult? = null,
-    val authenticatedUser: User? = null
+    val authenticatedUser: User? = null,
+    val loginError: String? = null
 ) {
     val isFormValid: Boolean
         get() = email.isNotBlank() &&
@@ -42,6 +42,7 @@ class LoginViewModel @Inject constructor(private val users: UserUseCases) : View
             state.copy(
                 email = newEmail,
                 emailError = validateEmail(newEmail),
+                loginError = null,
                 authenticatedUser = null
             )
         }
@@ -52,6 +53,7 @@ class LoginViewModel @Inject constructor(private val users: UserUseCases) : View
             state.copy(
                 password = newPassword,
                 passwordError = validatePassword(newPassword),
+                loginError = null,
                 authenticatedUser = null
             )
         }
@@ -77,6 +79,7 @@ class LoginViewModel @Inject constructor(private val users: UserUseCases) : View
         _uiState.update { state ->
             state.copy(
                 loginResult = RequestResult.Loading,
+                loginError = null,
                 authenticatedUser = null
             )
         }
@@ -89,7 +92,8 @@ class LoginViewModel @Inject constructor(private val users: UserUseCases) : View
                         onSuccess = { RequestResult.Success },
                         onFailure = { RequestResult.Failure(it.message ?: "No se pudo ingresar") }
                     ),
-                    authenticatedUser = result.getOrNull()
+                    authenticatedUser = result.getOrNull(),
+                    loginError = result.exceptionOrNull()?.message ?: if (result.isFailure) "No se pudo ingresar" else null
                 )
             }
         }

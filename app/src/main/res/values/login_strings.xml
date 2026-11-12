@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_account_suspended">Tu cuenta está suspendida. Contacta al administrador.</string>
+    <string name="login_account_blocked">Tu cuenta está bloqueada. Contacta al administrador.</string>
+    <string name="login_in_progress">Ya hay un inicio de sesión en curso.</string>
+</resources>

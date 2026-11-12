@@ -1,0 +1,25 @@
+{
+  "name": "share-you-ai-functions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Preparación de los servicios de análisis de Share You; la IA se activa después de configurar Gemini.",
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test test/*.test.cjs",
+    "check": "npm run build && npm test",
+    "test:integration": "node --test test/emulator.integration.cjs"
+  },
+  "dependencies": {
+    "@google/genai": "3.2.0",
+    "firebase-admin": "14.5.1",
+    "firebase-functions": "7.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  }
+}

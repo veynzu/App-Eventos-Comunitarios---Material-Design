@@ -93,6 +93,20 @@ class NavigationFlowTest {
     }
 
     @Test
+    fun suspendedAccountSeesPersistentStatusOnLogin() {
+        openLogin()
+        compose.onAllNodes(hasSetTextAction())[0].performTextInput("diego.ramirez@correo.com")
+        compose.onAllNodes(hasSetTextAction())[1].performTextInput("Participante123")
+        compose.onAllNodes(hasSetTextAction())[1].performImeAction()
+        compose.onNodeWithText("Iniciar sesión").performScrollTo().performClick()
+        waitForScreen("Tu cuenta está suspendida. Contacta al administrador.")
+        compose.onNodeWithTag("login_error").assertIsDisplayed()
+        compose.onNodeWithTag("main_bottom_bar").assertDoesNotExist()
+        compose.waitForIdle()
+        compose.onNodeWithTag("login_error").assertIsDisplayed()
+    }
+
+    @Test
     fun participantSeesOwnEnrollmentsAndCannotPublish() {
         val participant = users.first { it.id == "participant-ana" }
         loginAs(participant.id)

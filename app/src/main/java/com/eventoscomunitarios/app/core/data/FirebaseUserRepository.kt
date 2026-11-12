@@ -6,6 +6,7 @@ import com.eventoscomunitarios.app.domain.repository.MediaRepository
 import com.eventoscomunitarios.app.domain.model.AccountStatus
 import com.eventoscomunitarios.app.domain.model.RepositorySyncState
 import com.eventoscomunitarios.app.domain.model.User
+import com.eventoscomunitarios.app.domain.model.requireActiveAccount
 import com.eventoscomunitarios.app.domain.model.UserRole
 import com.eventoscomunitarios.app.domain.repository.UserRepository
 import com.google.firebase.Timestamp
@@ -54,6 +55,7 @@ class FirebaseUserRepository @Inject constructor(
     private var restoreJob: Job? = null
     private var listenerGeneration = 0
     private var creatingAccount = false
+    private var signingIn = false
     private var pendingProfiles: List<User>? = null
     private var deletingAccount = false
     private val authListener = FirebaseAuth.AuthStateListener { bindSession(it.currentUser) }
@@ -61,17 +63,22 @@ class FirebaseUserRepository @Inject constructor(
     init { auth.setLanguageCode("es"); auth.addAuthStateListener(authListener) }
 
     override suspend fun login(email: String, password: String): User {
-        val credential = auth.signInWithEmailAndPassword(email.trim(), password).await()
-        val firebaseUser = requireNotNull(credential.user) { "No se pudo iniciar sesión." }
+        check(!signingIn) { "Ya hay un inicio de sesión en curso." }
+        signingIn = true
         return try {
-            val profile = loadProfile(firebaseUser)
-            require(profile.accountStatus == AccountStatus.ACTIVE) { "La cuenta está suspendida." }
+            val credential = auth.signInWithEmailAndPassword(email.trim(), password).await()
+            val firebaseUser = requireNotNull(credential.user) { "No se pudo iniciar sesión." }
+            val profile = loadProfile(firebaseUser, publish = false)
+            profile.requireActiveAccount()
+            signingIn = false
+            bindSession(firebaseUser)
+            publishProfile(profile)
             profile
-        } catch (cancelled: CancellationException) {
-            throw cancelled
         } catch (error: Exception) {
             signOut()
             throw error
+        } finally {
+            signingIn = false
         }
     }
 
@@ -255,6 +262,9 @@ class FirebaseUserRepository @Inject constructor(
     }
 
     private fun bindSession(firebaseUser: FirebaseUser?) {
+        // Authentication avisa antes de que Firestore confirme si esta cuenta puede entrar.
+        // El login publica y conecta la sesión únicamente después de validar su estado.
+        if (signingIn && firebaseUser != null) return
         profilesListener?.remove()
         profilesListener = null
         restoreJob?.cancel()
@@ -313,16 +323,16 @@ class FirebaseUserRepository @Inject constructor(
         }
     }
 
-    private suspend fun loadProfile(firebaseUser: FirebaseUser): User {
+    private suspend fun loadProfile(firebaseUser: FirebaseUser, publish: Boolean = true): User {
         val reference = firestore.collection("users").document(firebaseUser.uid)
         var profile = requireNotNull(reference.get(Source.SERVER).await().toUser()) { "No se encontró el perfil de esta cuenta. Revisa la configuración o intenta de nuevo." }
         require(auth.currentUser?.uid == firebaseUser.uid) { "La sesión cambió. Inicia sesión de nuevo." }
         val authEmail = firebaseUser.email
-        if (authEmail != null && !profile.email.equals(authEmail, true)) {
+        if (profile.accountStatus == AccountStatus.ACTIVE && authEmail != null && !profile.email.equals(authEmail, true)) {
             reference.update(mapOf("email" to authEmail, "pendingEmail" to null)).await()
             profile = profile.copy(email = authEmail, pendingEmail = null)
         }
-        publishProfile(profile)
+        if (publish) publishProfile(profile)
         return profile
     }
 

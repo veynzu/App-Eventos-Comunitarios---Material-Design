@@ -1,0 +1,21 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "share-you-ai",
+      "runtime": "nodejs22",
+      "ignore": ["node_modules", ".git", "test", "*.local", ".env.example", ".secret*", "firebase-debug*.log"],
+      "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run check"]
+    }
+  ],
+  "firestore": { "rules": "firestore.rules" },
+  "storage": { "rules": "storage.rules" },
+  "emulators": {
+    "functions": { "host": "127.0.0.1", "port": 5001 },
+    "auth": { "host": "127.0.0.1", "port": 9099 },
+    "firestore": { "host": "127.0.0.1", "port": 8080 },
+    "storage": { "host": "127.0.0.1", "port": 9199 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}
