@@ -1,5 +1,7 @@
 package com.eventoscomunitarios.app.core.data
 
+import android.content.pm.ApplicationInfo
+import android.util.Log
 import com.eventoscomunitarios.app.core.util.toFirebaseMessage
 import com.eventoscomunitarios.app.domain.model.OrganizerVerificationStatus
 import com.eventoscomunitarios.app.domain.repository.MediaRepository
@@ -12,9 +14,11 @@ import com.eventoscomunitarios.app.domain.repository.UserRepository
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Source
@@ -65,9 +69,11 @@ class FirebaseUserRepository @Inject constructor(
     override suspend fun login(email: String, password: String): User {
         check(!signingIn) { "Ya hay un inicio de sesión en curso." }
         signingIn = true
+        var stage = "AUTHENTICATION"
         return try {
             val credential = auth.signInWithEmailAndPassword(email.trim(), password).await()
             val firebaseUser = requireNotNull(credential.user) { "No se pudo iniciar sesión." }
+            stage = "PROFILE"
             val profile = loadProfile(firebaseUser, publish = false)
             profile.requireActiveAccount()
             signingIn = false
@@ -75,6 +81,16 @@ class FirebaseUserRepository @Inject constructor(
             publishProfile(profile)
             profile
         } catch (error: Exception) {
+            // Diagnóstico exclusivo de debug: nunca registrar credenciales, tokens ni el cuerpo del error.
+            if (error !is CancellationException &&
+                auth.app.applicationContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+                val code = when (error) {
+                    is FirebaseAuthException -> error.errorCode
+                    is FirebaseFirestoreException -> error.code.name
+                    else -> error.javaClass.simpleName
+                }
+                Log.e("ShareYouAuth", "login_failed stage=$stage code=$code project=${auth.app.options.projectId} appId=${auth.app.options.applicationId}")
+            }
             signOut()
             throw error
         } finally {

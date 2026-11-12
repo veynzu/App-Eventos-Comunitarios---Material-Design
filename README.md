@@ -184,3 +184,19 @@ En otra terminal, con el emulador Android conectado:
 El script genera configuración bajo `build/firebase-emulators/`, copia las reglas reales del repositorio e inicia Auth (9099), Firestore (8080) y Storage (9199). No despliega nada. Las fixtures administrativas (rol y fechas del pasado) usan exclusivamente la API del emulador, no permisos abiertos en las reglas. La configuración HTTP local solo se incluye en debug; release mantiene HTTPS. Las pruebas cubren autenticación, persistencia entre clientes, cupos concurrentes, promoción de espera, reseñas, nuevas ediciones, favoritos, avisos e imágenes.
 
 Informes: `app/build/reports/`. APK: `app/build/outputs/apk/debug/app-debug.apk`. Las capturas de las nuevas pantallas se exportan como salida adicional de las pruebas Android. Las comprobaciones locales no publican reglas; el acceso al proyecto real depende de aplicar sus archivos desde Firebase Console.
+
+## Ejecutar desde otro equipo y generar una APK
+
+Actualizar la misma rama de Git y conservar en el equipo `local.properties` y `app/google-services.json`; están excluidos del repositorio. El JSON debe corresponder al proyecto `share-you-6a706` y al paquete `com.eventoscomunitarios.app`.
+
+Para ejecutar desde el código, sincronizar Gradle, seleccionar la configuración `app` y un dispositivo y pulsar Run. Android Studio compila e instala la APK en ese dispositivo automáticamente.
+
+Para generar el archivo APK manualmente, abrir la terminal en la raíz del proyecto y ejecutar:
+
+```powershell
+.\gradlew.bat :app:assembleDebug
+```
+
+La salida es `app/build/outputs/apk/debug/app-debug.apk`. Cada compañero puede generar ese archivo desde su copia actualizada. Comparar instalaciones requiere el mismo código y configuración Firebase; generar una APK manualmente utiliza el mismo flujo de compilación de debug que ejecutar `app`.
+
+Para diagnosticar login en una compilación debug, abrir Logcat y filtrar `tag:ShareYouAuth`. Después de un intento fallido aparece una línea con `stage`, `code`, `project` y `appId`. `AUTHENTICATION` identifica la llamada de autenticación y `PROFILE` la consulta/validación posterior del perfil. El registro no incluye correo, contraseña, claves, tokens ni el cuerpo del error y está desactivado en release. Estos cambios de diagnóstico deben estar incluidos en el commit compartido para que aparezcan al compilar en otro equipo.
