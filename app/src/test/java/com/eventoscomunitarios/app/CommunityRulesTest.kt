@@ -149,6 +149,93 @@ class CommunityRulesTest {
         assertTrue(community.vote(admin, event.id, 5).isFailure)
     }
 
+    @Test fun likesAndDislikesNotifyOnlyTheEventOwnerAndRemovingThemDoesNotNotify() = runBlocking {
+        val event = events.findEvent(1)!!
+        val actor = users.findUser(ana)!!
+        community.vote(ana, event.id, 1).getOrThrow()
+        val like = community.notifications.value.single()
+        assertEquals(event.organizerId, like.userId)
+        assertEquals("Nuevo like", like.title)
+        assertEquals("${actor.name} le dio like a ${event.title}.", like.message)
+        assertEquals(event.id, like.eventId)
+        assertFalse(like.isRead)
+
+        community.vote(ana, event.id, 1).getOrThrow()
+        assertEquals(1, community.notifications.value.size)
+        community.vote(ana, event.id, -1).getOrThrow()
+        val dislike = community.notifications.value.last()
+        assertEquals("Nuevo dislike", dislike.title)
+        assertEquals("${actor.name} le dio dislike a ${event.title}.", dislike.message)
+        assertEquals(event.organizerId, dislike.userId)
+        assertEquals(event.id, dislike.eventId)
+
+        community.vote(ana, event.id, 1).getOrThrow()
+        assertEquals("Nuevo like", community.notifications.value.last().title)
+        community.vote(ana, event.id, -1).getOrThrow()
+        community.vote(ana, event.id, -1).getOrThrow()
+        assertTrue(community.votes.value.isEmpty())
+        assertEquals(4, community.notifications.value.size)
+        assertTrue(community.notifications.value.all { it.userId == event.organizerId })
+    }
+
+    @Test fun invalidVotesDoNotCreateNotifications() = runBlocking {
+        assertTrue(community.vote(carlos, 1, 1).isFailure)
+        assertTrue(community.vote(ana, 1, 0).isFailure)
+        assertTrue(community.vote("participant-diego", 1, -1).isFailure)
+        assertTrue(community.vote(ana, 4, 1).isFailure)
+        assertTrue(community.vote(ana, Int.MAX_VALUE, 1).isFailure)
+        assertTrue(community.votes.value.isEmpty())
+        assertTrue(community.notifications.value.isEmpty())
+    }
+
+    @Test fun aFailedVoteDoesNotNotifyTheOwner() = runBlocking {
+        val failingVotes = object : CommunityRepository by communityRepository {
+            override suspend fun toggleVote(userId: String, eventId: Int, value: Int): Int? {
+                throw IllegalStateException("No se pudo guardar el voto")
+            }
+        }
+        val useCases = CommunityUseCases(failingVotes, eventsRepository, usersRepository)
+        assertTrue(useCases.vote(ana, 1, 1).isFailure)
+        assertTrue(community.notifications.value.isEmpty())
+    }
+
+    @Test fun aFailedNotificationDoesNotTurnASavedVoteIntoAFailedReaction() = runBlocking {
+        val failingNotices = object : CommunityRepository by communityRepository {
+            override suspend fun notify(userId: String, title: String, message: String, eventId: Int?) {
+                throw IllegalStateException("No se pudo entregar el aviso")
+            }
+        }
+        val useCases = CommunityUseCases(failingNotices, eventsRepository, usersRepository)
+        useCases.vote(ana, 1, 1).getOrThrow()
+        assertEquals(EventVote(1, ana, 1), community.votes.value.single())
+    }
+
+    @Test fun commentsAndContributionsNotifyTheOwnerButNotTheirOwnAuthor() = runBlocking {
+        val event = events.findEvent(1)!!
+        community.addComment(laura, event.id, "¿Qué debemos llevar?", isContribution = true).getOrThrow()
+        val contributionNotice = community.notifications.value.single()
+        assertEquals(event.organizerId, contributionNotice.userId)
+        assertEquals("Nuevo comentario", contributionNotice.title)
+        assertEquals("${users.findUser(laura)!!.name} comentó en ${event.title}.", contributionNotice.message)
+        assertEquals(event.id, contributionNotice.eventId)
+        assertFalse(contributionNotice.isRead)
+
+        community.addComment(carlos, event.id, "Lleven agua", isContribution = true).getOrThrow()
+        assertEquals(1, community.notifications.value.size)
+        participated(ana, event.id)
+        community.addComment(ana, event.id, "Gracias por el evento").getOrThrow()
+        val commentNotice = community.notifications.value.last()
+        assertEquals(event.organizerId, commentNotice.userId)
+        assertEquals("Nuevo comentario", commentNotice.title)
+        assertEquals("${users.findUser(ana)!!.name} comentó en ${event.title}.", commentNotice.message)
+        assertEquals(event.id, commentNotice.eventId)
+        assertEquals(2, community.notifications.value.size)
+
+        assertTrue(community.addComment(ana, event.id, " ").isFailure)
+        assertTrue(community.addComment(laura, event.id, "No participé").isFailure)
+        assertEquals(2, community.notifications.value.size)
+    }
+
     @Test fun commentsHaveRealAuthorAndCanBeRemovedByAuthorOrModerator() = runBlocking {
         participated(ana)
         val comment = community.addComment(ana, 1, "  ¡Nos vemos!  ").getOrThrow()

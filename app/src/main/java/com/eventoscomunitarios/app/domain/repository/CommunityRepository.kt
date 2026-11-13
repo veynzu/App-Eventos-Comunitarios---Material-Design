@@ -13,7 +13,8 @@ interface CommunityRepository {
     suspend fun nextCommentId(): Int
     suspend fun saveComment(comment: EventComment)
     suspend fun deleteComment(commentId: Int)
-    suspend fun toggleVote(userId: String, eventId: Int, value: Int)
+    /** Devuelve el voto guardado o null si se retiró la reacción. */
+    suspend fun toggleVote(userId: String, eventId: Int, value: Int): Int?
     suspend fun notify(userId: String, title: String, message: String, eventId: Int? = null)
     suspend fun markRead(userId: String, notificationId: Int?)
     suspend fun toggleFavorite(userId: String, eventId: Int, seriesId: Int = eventId)

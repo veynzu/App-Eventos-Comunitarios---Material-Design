@@ -33,4 +33,15 @@ class LocalizationResourcesTest {
         val moderatorNotice = notice.copy(title = "Publicación por revisar", message = "Inicio")
         assertEquals("Inicio", context("en").localizedNotificationMessage(moderatorNotice))
     }
+
+    @Test fun reactionNotificationsTranslateTitlesAndMessages() {
+        val like = AppNotification(1, "user", "Nuevo like", "Ana María le dio like a Festival de música.", 5, 0)
+        val dislike = like.copy(title = "Nuevo dislike", message = "Ana María le dio dislike a Festival de música.")
+        assertEquals("New like", context("en").localizedMessage(like.title))
+        assertEquals("New dislike", context("en").localizedMessage(dislike.title))
+        assertEquals("Ana María liked Festival de música.", context("en").localizedNotificationMessage(like))
+        assertEquals("Ana María disliked Festival de música.", context("en").localizedNotificationMessage(dislike))
+        assertEquals(like.message, context("es").localizedNotificationMessage(like))
+        assertEquals(dislike.message, context("es").localizedNotificationMessage(dislike))
+    }
 }

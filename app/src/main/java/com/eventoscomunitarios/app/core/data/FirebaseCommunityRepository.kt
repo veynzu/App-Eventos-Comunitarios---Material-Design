@@ -137,11 +137,11 @@ class FirebaseCommunityRepository @Inject constructor(
         }.await()
     }
 
-    override suspend fun toggleVote(userId: String, eventId: Int, value: Int) {
+    override suspend fun toggleVote(userId: String, eventId: Int, value: Int): Int? {
         val uid = requireActor(userId)
         require(value == 1 || value == -1) { "El voto debe ser positivo o negativo" }
         val reference = firestore.collection("votes").document(pairId(uid, eventId.toString()))
-        firestore.runTransaction { transaction ->
+        return firestore.runTransaction { transaction ->
             val actor = transaction.get(firestore.collection("users").document(uid))
             val event = transaction.get(firestore.collection("events").document(eventId.toString()))
             val previous = transaction.get(reference)

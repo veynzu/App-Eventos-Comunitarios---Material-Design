@@ -12,5 +12,7 @@
     <string name="notification_deleted_message">%1$s was deleted.</string>
     <string name="notification_promoted_message">Your attendance at %1$s was confirmed from the waiting list.</string>
     <string name="notification_comment_message">%1$s commented on %2$s.</string>
+    <string name="notification_like_message">%1$s liked %2$s.</string>
+    <string name="notification_dislike_message">%1$s disliked %2$s.</string>
     <string name="notification_followed_message">%1$s: %2$s at %3$s. Confirm whether you will attend.</string>
 </resources>

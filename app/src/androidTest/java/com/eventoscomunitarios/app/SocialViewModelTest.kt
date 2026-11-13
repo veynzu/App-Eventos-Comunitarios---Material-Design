@@ -70,6 +70,26 @@ class SocialViewModelTest {
         assertNotNull(author.uiState.value.message)
     }
 
+    @Test fun reactionNotificationsCanBeReadAndOpenTheEventForItsOwner() = onMain {
+        val participant = detail("participant-ana")
+        participant.vote(1)
+        participant.vote(-1)
+        participant.vote(-1)
+
+        val notices = tracked(NotificationsViewModel(handle("organizer-carlos"), data.community, data.events, data.users))
+        assertEquals(2, notices.uiState.value.unreadCount)
+        assertEquals(setOf("Nuevo like", "Nuevo dislike"), notices.uiState.value.items.map { it.notification.title }.toSet())
+        assertTrue(notices.uiState.value.items.all { it.canOpenEvent && it.notification.userId == "organizer-carlos" })
+        notices.openNotification(notices.uiState.value.items.first().notification.id)
+        assertEquals(1, notices.uiState.value.openEventId)
+        assertEquals(1, notices.uiState.value.unreadCount)
+        notices.markAllRead()
+        assertEquals(0, notices.uiState.value.unreadCount)
+
+        val participantNotices = tracked(NotificationsViewModel(handle("participant-ana"), data.community, data.events, data.users))
+        assertTrue(participantNotices.uiState.value.items.isEmpty())
+    }
+
     @Test fun profileValidatesFieldsAndUpdatesPublishedAuthorNames() = onMain {
         data.eventRepository.save(data.events.findEvent(2)!!.copy(organizerId = "participant-laura"))
         finishedParticipation("organizer-carlos", 2)

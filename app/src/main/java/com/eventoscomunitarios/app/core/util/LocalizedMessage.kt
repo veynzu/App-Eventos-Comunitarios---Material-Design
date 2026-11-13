@@ -338,6 +338,8 @@ private val applicationMessageResources = mapOf(
     "Publica, comenta y participa en los eventos de tu comunidad." to R.string.message_welcome_message,
     "Nueva edición de tu evento favorito" to R.string.message_notice_favorite_edition,
     "Nuevo comentario" to R.string.message_notice_new_comment,
+    "Nuevo like" to R.string.message_notice_new_like,
+    "Nuevo dislike" to R.string.message_notice_new_dislike,
     "Nuevo evento de alguien que sigues" to R.string.message_notice_followed_event,
     "Publicación actualizada por revisar" to R.string.message_notice_post_updated,
     "Publicación eliminada" to R.string.message_notice_post_deleted,

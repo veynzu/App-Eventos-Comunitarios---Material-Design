@@ -12,5 +12,7 @@
     <string name="notification_deleted_message">%1$s fue eliminada.</string>
     <string name="notification_promoted_message">Tu asistencia a %1$s quedó confirmada desde la lista de espera.</string>
     <string name="notification_comment_message">%1$s comentó en %2$s.</string>
+    <string name="notification_like_message">%1$s le dio like a %2$s.</string>
+    <string name="notification_dislike_message">%1$s le dio dislike a %2$s.</string>
     <string name="notification_followed_message">%1$s: %2$s a las %3$s. Confirma si participarás.</string>
 </resources>

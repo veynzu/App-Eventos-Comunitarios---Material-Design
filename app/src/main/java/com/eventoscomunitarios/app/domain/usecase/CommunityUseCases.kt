@@ -43,11 +43,16 @@ class CommunityUseCases @Inject constructor(
     }
 
     suspend fun vote(userId: String, eventId: Int, value: Int): Result<Unit> = firebaseResult {
-        requireActiveUser(userId)
+        val user = requireActiveUser(userId)
         val event = requirePublishedEvent(eventId)
         require(event.organizerId != userId) { "No puedes votar tu propia publicación" }
         require(value == 1 || value == -1) { "El voto debe ser positivo o negativo" }
-        communityRepository.toggleVote(userId, eventId, value)
+        // Usar el resultado confirmado por el repositorio, no una lista local que puede estar desactualizada.
+        val savedValue = communityRepository.toggleVote(userId, eventId, value)
+        if (savedValue != null) {
+            val reaction = if (savedValue == 1) "like" else "dislike"
+            notifySafely(event.organizerId, "Nuevo $reaction", "${user.name} le dio $reaction a ${event.title}.", eventId)
+        }
     }
 
     suspend fun toggleFavorite(userId: String, eventId: Int): Result<Unit> = firebaseResult {

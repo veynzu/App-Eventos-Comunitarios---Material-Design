@@ -116,6 +116,8 @@
     <string name="message_welcome_message">Post, comment and take part in your community events.</string>
     <string name="message_notice_favorite_edition">New edition of your favorite event</string>
     <string name="message_notice_new_comment">New comment</string>
+    <string name="message_notice_new_like">New like</string>
+    <string name="message_notice_new_dislike">New dislike</string>
     <string name="message_notice_followed_event">New event from someone you follow</string>
     <string name="message_notice_post_updated">Updated post awaiting review</string>
     <string name="message_notice_post_deleted">Post deleted</string>

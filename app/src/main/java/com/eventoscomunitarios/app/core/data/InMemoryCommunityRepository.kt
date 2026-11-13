@@ -29,10 +29,12 @@ class InMemoryCommunityRepository @Inject constructor() : CommunityRepository {
         } else comments.value + comment
     }
     override suspend fun deleteComment(commentId: Int) { mutableComments.value = comments.value.filterNot { it.id == commentId } }
-    override suspend fun toggleVote(userId: String, eventId: Int, value: Int) {
+    override suspend fun toggleVote(userId: String, eventId: Int, value: Int): Int? {
         val previous = votes.value.firstOrNull { it.userId == userId && it.eventId == eventId }
         val remaining = votes.value.filterNot { it.userId == userId && it.eventId == eventId }
-        mutableVotes.value = if (previous?.value == value) remaining else remaining + EventVote(eventId, userId, value)
+        val nextValue = value.takeUnless { previous?.value == value }
+        mutableVotes.value = if (nextValue == null) remaining else remaining + EventVote(eventId, userId, nextValue)
+        return nextValue
     }
     override suspend fun notify(userId: String, title: String, message: String, eventId: Int?) {
         mutableNotifications.value = notifications.value + AppNotification(

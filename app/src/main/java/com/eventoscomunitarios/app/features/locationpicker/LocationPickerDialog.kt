@@ -22,10 +22,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.eventoscomunitarios.app.R
 import com.eventoscomunitarios.app.domain.model.Coordinates
 import com.mapbox.geojson.Point
+import com.mapbox.maps.dsl.cameraOptions
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
 import com.mapbox.maps.extension.compose.annotation.generated.PointAnnotation
 import com.mapbox.maps.extension.compose.annotation.rememberIconImage
+import com.mapbox.maps.plugin.animation.MapAnimationOptions
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,7 +62,16 @@ fun LocationPickerDialog(
                     Box(Modifier.weight(1f).padding(16.dp)) { Text(stringResource(R.string.map_not_available)) }
                 } else {
                     val viewport = rememberMapViewportState { setCameraOptions { center(Point.fromLngLat(state.center.longitude, state.center.latitude)); zoom(15.0) } }
-                    LaunchedEffect(state.center) { viewport.setCameraOptions { center(Point.fromLngLat(state.center.longitude, state.center.latitude)); zoom(15.0) } }
+                    var previousCenter by remember { mutableStateOf(state.center) }
+                    LaunchedEffect(state.center) {
+                        if (previousCenter != state.center) {
+                            viewport.easeTo(
+                                cameraOptions { center(Point.fromLngLat(state.center.longitude, state.center.latitude)) },
+                                MapAnimationOptions.mapAnimationOptions { duration(450) }
+                            )
+                            previousCenter = state.center
+                        }
+                    }
                     MapboxMap(Modifier.fillMaxWidth().weight(1f).testTag("location_picker_map"), mapViewportState = viewport,
                         onMapClickListener = { point -> viewModel.selectPoint(Coordinates(point.latitude(), point.longitude())); true }) {
                         val marker = rememberIconImage(key = R.drawable.map_marker, painter = painterResource(R.drawable.map_marker))

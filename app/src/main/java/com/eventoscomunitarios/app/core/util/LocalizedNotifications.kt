@@ -35,6 +35,8 @@ private val notificationTemplates = listOf(
     NotificationTemplate("Publicación eliminada", Regex("(.*) fue eliminada\\.", RegexOption.DOT_MATCHES_ALL), R.string.notification_deleted_message),
     NotificationTemplate("¡Se liberó un cupo!", Regex("Tu asistencia a (.*) quedó confirmada desde la lista de espera\\.", RegexOption.DOT_MATCHES_ALL), R.string.notification_promoted_message),
     NotificationTemplate("Nuevo comentario", Regex("(.*) comentó en (.*)\\.", RegexOption.DOT_MATCHES_ALL), R.string.notification_comment_message),
+    NotificationTemplate("Nuevo like", Regex("(.*) le dio like a (.*)\\.", RegexOption.DOT_MATCHES_ALL), R.string.notification_like_message),
+    NotificationTemplate("Nuevo dislike", Regex("(.*) le dio dislike a (.*)\\.", RegexOption.DOT_MATCHES_ALL), R.string.notification_dislike_message),
     NotificationTemplate("Nueva edición de tu evento favorito", Regex("(.*): (.*) a las (.*)\\. Confirma si participarás\\.", RegexOption.DOT_MATCHES_ALL), R.string.notification_followed_message),
     NotificationTemplate("Nuevo evento de alguien que sigues", Regex("(.*): (.*) a las (.*)\\. Confirma si participarás\\.", RegexOption.DOT_MATCHES_ALL), R.string.notification_followed_message)
 )

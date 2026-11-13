@@ -116,6 +116,8 @@
     <string name="message_welcome_message">Publica, comenta y participa en los eventos de tu comunidad.</string>
     <string name="message_notice_favorite_edition">Nueva edición de tu evento favorito</string>
     <string name="message_notice_new_comment">Nuevo comentario</string>
+    <string name="message_notice_new_like">Nuevo like</string>
+    <string name="message_notice_new_dislike">Nuevo dislike</string>
     <string name="message_notice_followed_event">Nuevo evento de alguien que sigues</string>
     <string name="message_notice_post_updated">Publicación actualizada por revisar</string>
     <string name="message_notice_post_deleted">Publicación eliminada</string>

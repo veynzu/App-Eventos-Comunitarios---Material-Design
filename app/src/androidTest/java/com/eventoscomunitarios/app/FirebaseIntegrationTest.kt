@@ -128,6 +128,22 @@ class FirebaseIntegrationTest {
         a.community.toggleFollow(aUser.id, author.id).getOrThrow()
         waitUntil { owner.community.comments.value.any { it.id == comment.id } && owner.community.votes.value.any { it.eventId == event.id } }
         assertEquals(1, owner.users.statistics(author.id).receivedVotes)
+        waitUntil { owner.community.notifications.value.any { it.eventId == event.id && it.title == "Nuevo like" } }
+        val like = owner.community.notifications.value.single { it.eventId == event.id && it.title == "Nuevo like" }
+        assertEquals("${aUser.name} le dio like a ${event.title}.", like.message)
+        assertFalse(like.isRead)
+        a.community.vote(aUser.id, event.id, -1).getOrThrow()
+        waitUntil { owner.community.notifications.value.any { it.eventId == event.id && it.title == "Nuevo dislike" } }
+        val dislike = owner.community.notifications.value.single { it.eventId == event.id && it.title == "Nuevo dislike" }
+        assertEquals("${aUser.name} le dio dislike a ${event.title}.", dislike.message)
+        assertEquals(-1, owner.db.collection("votes").whereEqualTo("eventId", event.id).get(Source.SERVER).await().documents.single().getLong("value")?.toInt())
+        a.community.vote(aUser.id, event.id, -1).getOrThrow()
+        waitUntil { owner.community.votes.value.none { it.eventId == event.id } }
+        assertEquals(2, owner.db.collection("notifications").whereEqualTo("eventId", event.id).get(Source.SERVER).await().documents.count {
+            it.getString("title") in setOf("Nuevo like", "Nuevo dislike")
+        })
+        // Una reacción nueva vuelve a avisar después de retirarla.
+        a.community.vote(aUser.id, event.id, 1).getOrThrow()
         a.community.vote(aUser.id, event.id, 1).getOrThrow()
         waitUntil { owner.community.votes.value.none { it.eventId == event.id } }
         waitUntil { owner.community.notifications.value.any { it.eventId == event.id && it.title == "Nuevo comentario" } }
