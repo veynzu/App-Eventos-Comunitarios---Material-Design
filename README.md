@@ -200,3 +200,21 @@ Para generar el archivo APK manualmente, abrir la terminal en la raíz del proye
 La salida es `app/build/outputs/apk/debug/app-debug.apk`. Cada compañero puede generar ese archivo desde su copia actualizada. Comparar instalaciones requiere el mismo código y configuración Firebase; generar una APK manualmente utiliza el mismo flujo de compilación de debug que ejecutar `app`.
 
 Para diagnosticar login en una compilación debug, abrir Logcat y filtrar `tag:ShareYouAuth`. Después de un intento fallido aparece una línea con `stage`, `code`, `project` y `appId`. `AUTHENTICATION` identifica la llamada de autenticación y `PROFILE` la consulta/validación posterior del perfil. El registro no incluye correo, contraseña, claves, tokens ni el cuerpo del error y está desactivado en release. Estos cambios de diagnóstico deben estar incluidos en el commit compartido para que aparezcan al compilar en otro equipo.
+
+Cuando falla una cuenta existente, se puede comparar el acceso desde Windows con el del emulador. En la Terminal de Android Studio, situada en la raíz del proyecto, ejecutar:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\diagnose-login.ps1
+```
+
+El script pide el correo de una cuenta existente y su contraseña de forma oculta, y realiza un inicio de sesión mediante la [API oficial de Firebase Authentication](https://firebase.google.com/docs/reference/rest/auth#section-sign-in-email-password). No registra cuentas, restablece contraseñas ni modifica permisos o reglas. No requiere Firebase CLI, permisos administrativos ni dependencias adicionales. No imprime ni guarda contraseñas, claves o tokens; compartir únicamente el bloque entre `INICIO DIAGNOSTICO SHARE YOU` y `FIN DIAGNOSTICO SHARE YOU`.
+
+Comprueba el proyecto al que apunta realmente la clave, compara el JSON con los recursos debug generados por Gradle y muestra `login`, `loginHttp` y `loginCode`. `keyId` es una huella SHA-256 truncada de la clave de configuración, también incluida en el log debug de un login fallido; permite comparar equipos e instalaciones sin compartir la clave. No se calcula ni registra ninguna huella de la contraseña. La comprobación del proyecto usa la configuración pública de Identity Toolkit. Si detecta otro proyecto, omite el login. Una restricción que impida solicitudes desde Windows puede rechazar esta prueba aunque permita Android; el resultado se debe comparar con Logcat, no usarlo como sustituto del SDK.
+
+Si el acceso directo devuelve `login: OK` y en ese mismo equipo Android falla con la misma cuenta, el rechazo no se reproduce fuera del emulador: revisar la configuración de la aplicación instalada y la entrada del formulario. Si devuelve `INVALID_LOGIN_CREDENTIALS` o `INVALID_PASSWORD`, Firebase también rechaza esa combinación fuera de Android; comparar los informes de ambos equipos con la misma cuenta, sin publicar sus credenciales. Un resultado correcto de la prueba directa no demuestra por sí solo que el login del emulador esté corregido.
+
+Para comprobar únicamente configuración, sin pedir credenciales ni iniciar sesión:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\diagnose-login.ps1 -SoloConfiguracion
+```

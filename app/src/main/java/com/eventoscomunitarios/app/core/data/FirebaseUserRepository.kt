@@ -22,6 +22,7 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Source
+import java.security.MessageDigest
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -89,7 +90,10 @@ class FirebaseUserRepository @Inject constructor(
                     is FirebaseFirestoreException -> error.code.name
                     else -> error.javaClass.simpleName
                 }
-                Log.e("ShareYouAuth", "login_failed stage=$stage code=$code project=${auth.app.options.projectId} appId=${auth.app.options.applicationId}")
+                val keyId = MessageDigest.getInstance("SHA-256")
+                    .digest(auth.app.options.apiKey.toByteArray(Charsets.UTF_8))
+                    .take(8).joinToString("") { "%02x".format(it) }
+                Log.e("ShareYouAuth", "login_failed stage=$stage code=$code project=${auth.app.options.projectId} appId=${auth.app.options.applicationId} keyId=$keyId")
             }
             signOut()
             throw error
